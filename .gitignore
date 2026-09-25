@@ -1,0 +1,9 @@
+/vendor/
+/botdata/
+/build/
+
+*.o
+*.so
+*.d
+__pycache__/
+/.idea/
