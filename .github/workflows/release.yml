@@ -1,0 +1,58 @@
+name: release
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  package:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          submodules: true
+      - name: Install MinGW
+        run: sudo apt-get update && sudo apt-get install -y gcc-mingw-w64-x86-64
+      - name: Fetch weapons.json from the supported game release
+        run: |
+          curl -sSfL -o dk.tar.bz2 \
+            https://github.com/maraakate/daikatana/releases/download/v12-21-2025/Daikatana-Linux-2025-12-21-x64.tar.bz2
+          tar xjf dk.tar.bz2 --strip-components=2 Daikatana-Linux-2025-12-21-x64/data/weapons.json
+          echo "7fa9111d837710a7f0f638ad48f682f8e90e787b6fdd967fe6780af27c84f874  weapons.json" | sha256sum -c
+      - name: Build and package
+        run: |
+          if [ "$GITHUB_REF_TYPE" = tag ]; then ver=${GITHUB_REF_NAME#v}; else ver=dev-${GITHUB_SHA::7}; fi
+          .github/package.sh "$ver" weapons.json dist
+      - uses: actions/upload-artifact@v6
+        with:
+          name: packages
+          path: dist/*
+
+  release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: package
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/download-artifact@v7
+        with:
+          name: packages
+          path: dist
+      - name: Publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          ref=$(gh api "repos/$GH_REPO/git/ref/tags/$TAG" --jq '.object.type + " " + .object.sha')
+          if [ "${ref%% *}" != "tag" ]; then
+            echo "::error::$TAG is a lightweight tag; the release notes come from an annotated tag's message: git tag -a -F notes.md $TAG"
+            exit 1
+          fi
+          gh api "repos/$GH_REPO/git/tags/${ref##* }" --jq .message \
+            | sed '/^-----BEGIN PGP SIGNATURE-----$/,$d' > notes.md
+          grep -q '[^[:space:]]' notes.md || { echo "::error::$TAG has an empty tag message."; exit 1; }
+          gh release create "$TAG" dist/* --title "dkbot $TAG" --notes-file notes.md

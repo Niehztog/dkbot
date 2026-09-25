@@ -1,0 +1,4 @@
+[submodule "gladiator-bot-restored"]
+	path = gladiator-bot-restored
+	url = https://github.com/Niehztog/gladiator-bot-restored.git
+	branch = main
