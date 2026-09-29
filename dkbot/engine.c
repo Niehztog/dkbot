@@ -43,6 +43,7 @@ int dk_engine_init(void)
 
 	dk_orig.dll_Entry                  = dk_sym("dll_Entry");
 	dk_orig.dll_ClientConnect          = dk_sym("dll_ClientConnect");
+	dk_orig.dll_ClientDisconnect       = dk_sym("dll_ClientDisconnect");
 	dk_orig.dll_ClientBeginServerFrame = dk_sym("dll_ClientBeginServerFrame");
 	dk_orig.Client_Think = dk_sym(DK_SYM_CLIENT_THINK);
 	dk_orig.P_RunFrame   = dk_sym(DK_SYM_RUN_FRAME);

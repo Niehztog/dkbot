@@ -39,13 +39,13 @@
  * Deliberately NOT `static`: gladi386.so exports it as a `D` symbol
  * (0005bcc8 D iteminfo_fields), which a file-static array can never be. */
 char *iteminfo_fields[] = {
-    FE("name",        0x000, 0x004, 0, 0x00000000),
-    FE("model",       0x0A0, 0x004, 0, 0x00000000),
-    FE("type",        0x0F4, 0x002, 0, 0x00000000),
-    FE("index",       0x0F8, 0x002, 0, 0x00000000),
-    FE("respawntime", 0x0FC, 0x003, 0, 0x00000000),
-    FE("mins",        0x100, 0x103, 3, 0x00000000),  /* vec3, flags 0x103 */
-    FE("maxs",        0x10C, 0x103, 3, 0x00000000),  /* vec3, flags 0x103 */
+    FE("name",        0x000, FT_STRING, 0, 0x00000000),
+    FE("model",       0x0A0, FT_STRING, 0, 0x00000000),
+    FE("type",        0x0F4, FT_INT, 0, 0x00000000),
+    FE("index",       0x0F8, FT_INT, 0, 0x00000000),
+    FE("respawntime", 0x0FC, FT_FLOAT, 0, 0x00000000),
+    FE("mins",        0x100, FT_FLOAT|FT_ARRAY, 3, 0x00000000),  /* vec3 */
+    FE("maxs",        0x10C, FT_FLOAT|FT_ARRAY, 3, 0x00000000),  /* vec3 */
     FE_END
 };
 structdef_t iteminfo_struct = { 284, iteminfo_fields };
@@ -112,7 +112,7 @@ itemconfig_t * LoadItemConfig(char *filename)
       }
       item = &cfg->items[cfg->numitems];
       memset(item, 0, sizeof(iteminfo_t));
-      if ( !PC_ExpectTokenType(src, 1, 0, ArgList) )
+      if ( !PC_ExpectTokenType(src, TT_STRING, 0, ArgList) )
       {
         FreeMemory(cfg);
         FreeMemory(src);
@@ -711,7 +711,7 @@ int __cdecl BotChooseLTGItem(bot_goalstate_t *goalstate, vec3_t origin, char *in
                 goal.areanum = v9;
                 goal.entitynum = li->entitynum;
                 goal.number = li->number;
-                goal.flags = 1;
+                goal.flags = GFL_ITEM;
                 goal.iteminfo = li->iteminfo;
                 bestitem = li;
               }
@@ -735,7 +735,7 @@ int __cdecl BotChooseLTGItem(bot_goalstate_t *goalstate, vec3_t origin, char *in
       goal.maxs[2] = 15;
       goal.entitynum = 0;
       goal.number = 0;
-      goal.flags = 2;
+      goal.flags = GFL_ROAM;
       goal.iteminfo = 0;
       BotPushGoal(goalstate, &goal);
       return 1;
@@ -851,7 +851,7 @@ int __cdecl BotChooseNBGItem(bot_goalstate_t *goalstate, vec3_t origin, char *in
                           goal.areanum = v11;
                           goal.entitynum = li->entitynum;
                           goal.number = li->number;
-                          goal.flags = 1;
+                          goal.flags = GFL_ITEM;
                           goal.iteminfo = li->iteminfo;
                           bestitem = li;
                         }
@@ -924,7 +924,8 @@ int __cdecl BotTouchingGoal(vec3_t origin, float *goal)
  *   - `entitynum <= 0` returns 1, where Q3 returns qfalse;
  *   - the "not updated" test is the older `if (!entinfo.valid)`, which survives
  *     commented out in Q3, whose live code uses `ltime < AAS_Time() - 0.5`;
- *   - contentmask is the literal 3 (Q3 passes CONTENTS_SOLID via a #define).
+ *   - the content mask is Q2's MASK_SOLID, CONTENTS_SOLID|CONTENTS_WINDOW, where
+ *     Q3 passes CONTENTS_SOLID.
  * `viewangles` is unused, present only to match the engine call signature. */
 BOOL __cdecl BotItemGoalInVisButNotVisible(int viewer, vec3_t eye, vec3_t viewangles, bot_goal_t *goal)
 {
@@ -932,12 +933,12 @@ BOOL __cdecl BotItemGoalInVisButNotVisible(int viewer, vec3_t eye, vec3_t viewan
   bsp_trace_t trace;        // [ebp-7Ch] BYREF
   vec3_t middle;            // [ebp-88h] world-space goal centre
 
-  if ( !(goal->flags & 1) )
+  if ( !(goal->flags & GFL_ITEM) )
     return 0;
   VectorAdd(goal->mins, goal->mins, middle);
   VectorScale(middle, 0.5, middle);
   VectorAdd(goal->origin, middle, middle);
-  trace = AAS_Trace(eye, NULL, NULL, middle, viewer, 3);
+  trace = AAS_Trace(eye, NULL, NULL, middle, viewer, MASK_SOLID);
   if ( trace.fraction >= 1.0f )
   {
     if ( goal->entitynum <= 0 )

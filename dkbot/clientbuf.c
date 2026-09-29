@@ -76,7 +76,8 @@ void dkbot_arm_client_buffers(void)
 
 		if (!cl)
 			continue;
-		if (DK_AT(cl, DK_CLIENT_OFF_STATE, int) == DK_CS_FREE) {
+		/* Free, or the zombie a kicked bot leaves on the edict the next bot takes. */
+		if (DK_AT(cl, DK_CLIENT_OFF_STATE, int) != DK_CS_SPAWNED) {
 			DK_AT(cl, DK_CLIENT_OFF_STATE, int) = DK_CS_SPAWNED;
 			DK_AT(cl, DK_CLIENT_OFF_EDICT, const void *) = ent;
 			snprintf((char *)cl + DK_CLIENT_OFF_NAME, DK_CLIENT_NAME_SIZE,

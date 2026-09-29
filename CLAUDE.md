@@ -12,6 +12,7 @@ dkbot adds multiplayer bots to Daikatana 1.3 by loading our own game module into
 - The world module talks to the engine through `serverState_t` (`gstate`, handed over by `dll_Entry` message 12). Anything aimed at clients goes through it, not `gi`.
 - 1.3 links the retail game DLLs statically but keeps the plumbing: `DLL_LoadDLLs` `dlopen(NULL)`s the executable, and `DLL_FindFunction` returns the first `dlsym` hit in its `dll_t dlls[50]` table. Our module takes slot 0 -- on Linux the `LD_PRELOAD` shim interposes `dlopen`, on Windows `dkbot.dll` hooks the executable's `GetProcAddress` import -- so the 17 `dll_*` names we define win and everything else falls through to the engine.
 - `GetGameAPI` fills `globals` after `DLL_LoadDLLs` returns: never patch `globals` from `dll_Entry`.
+- `GetGameAPI` copies `gi` and `serverState` afresh at every server start (the first map, a map after `disconnect` or `killserver`; not a map change): a slot patched in either goes in again at every message 12 (`DK_HOOK` in `dkbot/cmd.c`).
 - The game registers most client commands (`kill`, `use`) from `dll_ServerLoad` inside the original `dll_Entry`: a hook on `AddCommand` goes in before that call.
 - Loading our module `RTLD_GLOBAL` can add names the engine resolves (new entity classes), never replace one the executable defines.
 - Paks and BSPs are not Quake II's (72-byte pak entries, compressed; IBSP v41): use `tools/dkpak.py` and `tools/dkbsp.py`, never a stock reader.
@@ -73,10 +74,12 @@ LD_PRELOAD=$PWD/build/dk_preload.so DK_MOD=$PWD/build/dkbot.so \
 - Synthesize usercmds exactly as `gladiator-bot-restored/game/bl_main.c` does: angles relative to `delta_angles`, Quake II's right vector for `sidemove`, +-400 moves, `msec = 1000 * thinktime`, and `ClientThink` called twice with half the `msec`.
 - Bots hold real client slots (`cs_spawned`), allocated from `maxclients` down. `dkbot/clientbuf.c` re-arms each slot every frame, because `SV_InitGame` reallocates `svs.clients`: message buffers, `lastmessage` and `idletime` against the timeout and idle kicks, qport -1, and on a listen server a 0.0.0.0 netchan address, so that bot packets never enter the host's loopback ring.
 - Never swallow a per-client send. Senders stage into a shared buffer that only the real call empties, so a dropped call hands its message to the next recipient.
+- `ge->ClientDisconnect` is our `dll_ClientDisconnect`, which forgets a bot the engine drops (a kick): disconnect a bot only through `disconnect()` in `dkbot/bots.c`.
 - Tables indexed by client number hold `DK_MAX_CLIENTS` (256), the engine's ceiling for `maxclients`.
 - Never spawn several bots in one frame: spawn-point selection puts them all on one point.
 - `player_record_t.deaths` is never written by the engine. Respawn needs a button transition, not a held button.
 - The `bot` command is registered with `Cmd_AddCommand`, which clients cannot reach; only the console and rcon can. It needs no permission check.
+- The game registers `say` only on a listen server, so bots chat only there: chat, and the spam kick it can earn (`docs/ENGINE-BUGS.md`), never show on `dkded`.
 - The model index table handed to the library is the engine's own: `sv.configstrings` from `CS_MODELS`.
 
 ### The bot library

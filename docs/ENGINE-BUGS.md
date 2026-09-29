@@ -17,3 +17,11 @@ As it fades, `doPentagram` zeroes its own slot in its controller's `nmController
 ## Gibs read uninitialized stack
 
 `ai_throw_gib` computes gib trajectories from uninitialized stack, so the same seed can play two different games. `+set gib_enable 0` avoids it, and `tools/bench.py` sets it.
+
+## A match that never ends
+
+`ChooseNextMap` takes the deathmatch map after the current one in `MultiplayerMaps.json` without checking that it exists; only its other paths fall back to `e1dm1a`. Six stock maps are followed by one that 1.3 does not ship: e1dm2a (e1dm3), e1m3b (q1dm3), e2m2a (e2dm3), e3m1c (e3dm3), e4m5a (e4nizcorpses) and slicedm1 (slicedm2). `P_ExitLevel` clears the intermission before its `changelevel` fails with `Can't find map maps/e1dm3.bsp`, and the next frame's fraglimit or timelimit check ends the match again, so the intermission restarts forever. Each key press to continue fires the weapon, and once the leader leaves, play resumes in the intermission's view, which `P_ExitLevel` only partly undoes. `dm_same_map 1`, `sv_random_map 1` or a `maps_dm` list avoid it, since those picks are checked.
+
+## Every say counts as spam
+
+`concmd_CheckSpam` tests `last_message_frame - framenum` against `p_spamticks`, which never holds, so every say counts and the 21st since the sender last respawned kicks it (`p_spamcount 20`, `p_spamkick 1`). Chatting bots reach that when they live long, and in the intermission loop above, where none dies. The check skips a client whose `gclient_s.bVerifiedBot` is set, which nothing in the engine sets; dkbot sets it while a bot's command runs.

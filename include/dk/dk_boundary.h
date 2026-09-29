@@ -196,6 +196,12 @@ typedef struct dk_cvar_s {
 
 /* gclient_s */
 #define DK_CLIENT_OFF_PS        0x000
+/* Past pers, whose saved inventory holds char[MAX_PATH] names. */
+#ifdef _WIN32
+#define DK_CLIENT_OFF_VERIFIED_BOT 0x4b04
+#else
+#define DK_CLIENT_OFF_VERIFIED_BOT 0x2a264
+#endif
 
 #define DK_PS_OFF_PMOVE         0x000
 #define DK_PS_OFF_VIEWANGLES    0x024

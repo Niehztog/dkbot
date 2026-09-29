@@ -50,6 +50,7 @@ Players join with `connect <server>:27992`. Bots stay through map changes and co
 - Bots never use the Slugger's cordite grenades or inventory items.
 - Bots play only on maps with navigation data. The package has it for every stock multiplayer map; [docs/AAS.md](docs/AAS.md) makes it for others.
 - Bots sometimes get stuck in a dead end for a while.
+- A match that ends on e1dm2a, e1m3b, e2m2a, e3m1c, e4m5a or slicedm1 never leaves the scoreboard: Daikatana 1.3 moves on to a map it does not ship ([docs/ENGINE-BUGS.md](docs/ENGINE-BUGS.md)). `set dm_same_map 1` avoids it.
 
 If `bot` is an unknown command, the game was not started through `dkbot-server.sh` or `dkbot-launch.exe`. If the console says `dkbot: bots unavailable: ...`, it names what is missing.
 

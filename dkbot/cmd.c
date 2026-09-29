@@ -7,6 +7,14 @@
 #define DK_MAX_CMD_ARGS 8
 #define DK_MAX_COMMANDS 256
 
+/* GetGameAPI copies gi and serverState afresh at every server start: hook again each time. */
+#define DK_HOOK(tab, off, type, ours, orig) do {                         \
+		if (DK_AT(tab, off, type) && DK_AT(tab, off, type) != (ours)) { \
+			(orig) = DK_AT(tab, off, type);                         \
+			DK_AT(tab, off, type) = (ours);                         \
+		}                                                               \
+	} while (0)
+
 static char args_buf[256];
 static char argv_buf[DK_MAX_CMD_ARGS][64];
 static int  argc_now;
@@ -50,26 +58,18 @@ int dkbot_redirect_args(void)
 	void *gi = dk_glob.gi;
 	void *ss = dk_glob.ss;
 
-	if (orig_gi_argv)
-		return 0;
 	if (!gi || !ss)
 		return 1;
-	orig_gi_argc = DK_AT(gi, DK_GI_OFF_GETARGC, dk_fn_argc);
-	orig_gi_argv = DK_AT(gi, DK_GI_OFF_GETARGV, dk_fn_argv);
-	orig_gi_args = DK_AT(gi, DK_GI_OFF_GETARGS, dk_fn_args);
-	orig_ss_argc = DK_AT(ss, DK_SS_OFF_GETARGC, dk_fn_argc);
-	orig_ss_argv = DK_AT(ss, DK_SS_OFF_GETARGV, dk_fn_argv);
+	DK_HOOK(gi, DK_GI_OFF_GETARGC, dk_fn_argc, bot_argc, orig_gi_argc);
+	DK_HOOK(gi, DK_GI_OFF_GETARGV, dk_fn_argv, bot_argv, orig_gi_argv);
+	DK_HOOK(gi, DK_GI_OFF_GETARGS, dk_fn_args, bot_args, orig_gi_args);
+	DK_HOOK(ss, DK_SS_OFF_GETARGC, dk_fn_argc, ss_argc, orig_ss_argc);
+	DK_HOOK(ss, DK_SS_OFF_GETARGV, dk_fn_argv, ss_argv, orig_ss_argv);
 	if (!orig_gi_argv || !orig_ss_argv) {
 		dk_log("argument accessors look wrong (gi=%p ss=%p)\n",
 		       (void *)orig_gi_argv, (void *)orig_ss_argv);
-		orig_gi_argv = NULL;
 		return 1;
 	}
-	DK_AT(gi, DK_GI_OFF_GETARGC, dk_fn_argc) = bot_argc;
-	DK_AT(gi, DK_GI_OFF_GETARGV, dk_fn_argv) = bot_argv;
-	DK_AT(gi, DK_GI_OFF_GETARGS, dk_fn_args) = bot_args;
-	DK_AT(ss, DK_SS_OFF_GETARGC, dk_fn_argc) = ss_argc;
-	DK_AT(ss, DK_SS_OFF_GETARGV, dk_fn_argv) = ss_argv;
 	return 0;
 }
 
@@ -115,21 +115,18 @@ void dkbot_record_commands(void)
 	void *gi = dk_glob.gi;
 	void *ss = dk_glob.ss;
 
-	if (gi && !orig_addcommand) {
-		orig_addcommand = DK_AT(gi, DK_GI_OFF_ADDCOMMAND, dk_fn_addcommand);
-		if (orig_addcommand)
-			DK_AT(gi, DK_GI_OFF_ADDCOMMAND, dk_fn_addcommand) = gi_addcommand;
-	}
-	if (ss && !orig_ss_addcommand) {
-		orig_ss_addcommand = DK_AT(ss, DK_SS_OFF_ADDCOMMAND, dk_fn_addcommand);
-		if (orig_ss_addcommand)
-			DK_AT(ss, DK_SS_OFF_ADDCOMMAND, dk_fn_addcommand) = ss_addcommand;
-	}
+	if (gi)
+		DK_HOOK(gi, DK_GI_OFF_ADDCOMMAND, dk_fn_addcommand, gi_addcommand,
+		        orig_addcommand);
+	if (ss)
+		DK_HOOK(ss, DK_SS_OFF_ADDCOMMAND, dk_fn_addcommand, ss_addcommand,
+		        orig_ss_addcommand);
 }
 
 int dkbot_client_command_argv(edict_t *ent, const char **argv, int argc)
 {
 	dk_fn_cmdhandler handler;
+	unsigned char *cl;
 	int i;
 
 	if (!ent || !argv || argc < 1 || !argv[0] || active
@@ -147,9 +144,15 @@ int dkbot_client_command_argv(edict_t *ent, const char **argv, int argc)
 			strncat(args_buf, " ", sizeof args_buf - strlen(args_buf) - 1);
 		strncat(args_buf, argv_buf[i], sizeof args_buf - strlen(args_buf) - 1);
 	}
+	/* The engine kicks a client for its 21st say in one life, unless it is a verified bot. */
+	cl = DK_AT(ent, DK_EDICT_OFF_CLIENT, unsigned char *);
+	if (cl)
+		DK_AT(cl, DK_CLIENT_OFF_VERIFIED_BOT, int) = 1;
 	active = 1;
 	handler(ent);
 	active = 0;
+	if (cl)
+		DK_AT(cl, DK_CLIENT_OFF_VERIFIED_BOT, int) = 0;
 	return 0;
 }
 

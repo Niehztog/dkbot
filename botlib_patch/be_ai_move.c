@@ -289,7 +289,7 @@ BOOL __cdecl BotOnMover(vec3_t origin, int entnum, aas_reachability_t* reach)
   org[2] += 24.0f;
   VectorCopy(origin, end);
   end[2] -= 48.0f;
-  trace = AAS_Trace(org, boxmins, boxmaxs, end, entnum, 33619971);
+  trace = AAS_Trace(org, boxmins, boxmaxs, end, entnum, MASK_PLAYERSOLID);
   /* Nested-if with a single shared "return 0" fallthrough, matching Q3, rather than
    * one chained && expression — that makes gcc accumulate the boolean in esi instead
    * of returning at each failure point. */
@@ -563,8 +563,8 @@ float __cdecl BotGapDistance(bot_movestate_t *ms, float *dir)
         VectorCopy(trace.endpos, end);
         end[2] -= 20.0f;
         /* barrier-jump under-water check */
-        /* dkbot: water under a drop is no gap unless it kills; toxic water sets 0x20 too */
-        if ( (AAS_PointContents((float *)end) & (0x20 | DK_CONTENTS_TOXIC)) == 0x20 )
+        /* dkbot: water under a drop is no gap unless it kills; toxic water sets CONTENTS_WATER too */
+        if ( (AAS_PointContents((float *)end) & (CONTENTS_WATER | DK_CONTENTS_TOXIC)) == CONTENTS_WATER )
           break;
         return dist;
       }
@@ -706,7 +706,7 @@ int __cdecl BotWalkInDirection(bot_movestate_t *ms, vec3_t dir, float speed, int
                       maxframes,
                       maxframes,
                       ms->thinktime,
-                      61,
+                      SE_HITGROUND|SE_ENTERWATER|SE_ENTERSLIME|SE_ENTERLAVA|SE_HITGROUNDDAMAGE,
                       0);
     if ( move.frames >= maxframes )
       return 0;
@@ -716,7 +716,7 @@ int __cdecl BotWalkInDirection(bot_movestate_t *ms, vec3_t dir, float speed, int
       vec3_t path;
       float dist;
 
-      if ( type & 4 )
+      if ( type & MOVE_JUMP )
       {
         VectorSet(path, cmdmove[0], cmdmove[1], 0.0f);
         dist = VectorNormalize(path) * 2.0f * libvar_sv_jumpvel->value / libvar_sv_gravity->value + 48.0f;
@@ -730,7 +730,7 @@ int __cdecl BotWalkInDirection(bot_movestate_t *ms, vec3_t dir, float speed, int
         return 0;
     }
     /* dkbot: the bot slides on after a jump lands; refuse fatal liquid ahead (slime is survivable) */
-    if ( (type & 4) && (move.stopevent & 1) )
+    if ( (type & MOVE_JUMP) && (move.stopevent & SE_HITGROUND) )
     {
       vec3_t slide;
 
@@ -741,7 +741,7 @@ int __cdecl BotWalkInDirection(bot_movestate_t *ms, vec3_t dir, float speed, int
     }
     /* dkbot: the prediction stops at any liquid: refuse only stepping into toxic liquid */
     stop = move.stopevent;
-    if ( stop & 0x18 )
+    if ( stop & (SE_ENTERWATER|SE_ENTERSLIME|SE_ENTERLAVA) )
     {
       int there = (int)move.endcontents;
       vec3_t feet;
@@ -749,9 +749,9 @@ int __cdecl BotWalkInDirection(bot_movestate_t *ms, vec3_t dir, float speed, int
       VectorCopy(ms->origin, feet);
       feet[2] -= 22.0f;
       if ( !(there & DK_CONTENTS_TOXIC) || (AAS_PointContents(feet) & there & DK_CONTENTS_TOXIC) )
-        stop &= ~0x18;
+        stop &= ~(SE_ENTERWATER|SE_ENTERSLIME|SE_ENTERLAVA);
     }
-    if ( (stop & 0x38) != 0 )
+    if ( (stop & (SE_ENTERWATER|SE_ENTERSLIME|SE_ENTERLAVA|SE_HITGROUNDDAMAGE)) != 0 )
       return 0;
     /* dkbot: keep hordir, the predicted direction; a jump's displacement overflows the usercmd */
     v13 = move.endpos[0] - ms->origin[0];
@@ -844,7 +844,7 @@ int __cdecl BotCheckBlocked(bot_movestate_t *ms, float *dir, bot_moveresult_t *m
     maxs[2] = maxs[2] - 10.0f;
   }
   VectorMA(ms->origin, 3.0f, dir, end);
-  trace = AAS_Trace(ms->origin, mins, maxs, end, ms->entitynum, 33619971);
+  trace = AAS_Trace(ms->origin, mins, maxs, end, ms->entitynum, MASK_PLAYERSOLID);
   /* Q3's cognate is void with a single combined guard and no return statement; every
    * call site here discards the result, and the disasm materialises no return value
    * on either early-out — the same "declared int, no return statement" class as
@@ -1150,7 +1150,7 @@ bot_moveresult_t __cdecl BotFinishTravel_WaterJump(bot_movestate_t *ms, aas_reac
    * calls it through thunk 0x10001CEE at 0x1003265F, the .so as F664.  The presence
    * type never has a 0x38 liquid bit, so calling that one made every water-jump
    * finish bail out here. */
-  if ( !(AAS_PointContents(pnt) & 0x38) )   /* under-foot liquid check */
+  if ( !(AAS_PointContents(pnt) & (CONTENTS_LAVA|CONTENTS_SLIME|CONTENTS_WATER)) )   /* under-foot liquid check */
   {
     /* dkbot: Daikatana's water jump rises straight up: steer onto the ledge */
     VectorSubtract(reach->end, ms->origin, dir);
@@ -1608,7 +1608,7 @@ bot_moveresult_t __cdecl BotTravel_Elevator(bot_movestate_t *ms, aas_reachabilit
       if ( ms->moveflags & MFL_SWIMMING ) result.flags |= MOVERESULT_SWIMVIEW;
 #endif
       /* this isn't a failure... just wait till the elevator comes down */
-      result.type = 1;
+      result.type = RESULTTYPE_ELEVATORUP;
       result.flags |= MOVERESULT_WAITING;
       return result;
     }
@@ -1854,8 +1854,8 @@ bot_moveresult_t __cdecl BotTravel_RocketJump(bot_movestate_t *ms, aas_reachabil
     EA_Move(ms->client, dir, speed);
   }
   Vector2Angles(dir, ms->viewangles);
-  /* int bit-pattern store: the original sets pitch to 90.0f via raw bits. */
-  *(int *)&ms->viewangles[0] = 1119092736;
+  //look straight down
+  ms->viewangles[PITCH] = 90;
   EA_View(ms->client, ms->viewangles);
   moveresult.flags |= MOVERESULT_MOVEMENTVIEWSET;
   EA_UseItem(ms->client, "Rocket Launcher");

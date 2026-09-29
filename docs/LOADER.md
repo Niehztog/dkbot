@@ -50,7 +50,7 @@ Any other message returns 0.
 
 **Linux** (`shim/dk_preload.c`, loaded with `LD_PRELOAD`): the shim interposes `dlopen`. The first `dlopen(NULL)` called from `DLL_LoadDLLs` (found with `dladdr`) pins that call site, which then returns a handle to `$DK_MOD` and nowhere else; that survives the skipped GCE slot on a dedicated server and a second `DLL_LoadDLLs`.
 
-**Windows** (`launcher/dkbot-launch.c`, `dkbot/dk_win.c`): the launcher starts the game suspended and injects `dkbot.dll` before the game's own code runs. Its `DllMain` patches the executable's `GetProcAddress` import to return our `dll_Entry` and `dll_ClientConnect` and pass every other name through. The engine's internal symbols come from `daikatana.pdb` through dbghelp.
+**Windows** (`launcher/dkbot-launch.c`, `dkbot/dk_win.c`): the launcher starts the game suspended and injects `dkbot.dll` before the game's own code runs. Its `DllMain` patches the executable's `GetProcAddress` import to return our `dll_Entry`, `dll_ClientConnect` and `dll_ClientDisconnect` and pass every other name through. The engine's internal symbols come from `daikatana.pdb` through dbghelp.
 
 Either way the other slots still resolve to the executable, so every name the module does not define falls through to the engine.
 
@@ -63,4 +63,4 @@ Either way the other slots still resolve to the executable, so every name the mo
 
 ## The overridable names
 
-Besides the three `*_dll_Entry` points, `DLL_FindFunction` resolves 17 names: `dll_ClientThink`, `dll_ClientConnect`, `dll_ClientBegin`, `dll_ClientUserinfoChanged`, `dll_ClientDisconnect`, `dll_ClientBeginServerFrame`, `dll_SetStats`, `dll_Client_InitAttributes`, `dll_BeginIntermission`, `dll_LoadNodes`, `dll_EntityLoadCleanup`, `dll_RegisterWorldFuncs`, `dll_FLAG_GetScores`, `dll_FLAG_CheckRules`, `dll_DT_CanDamage`, `SIDEKICK_Alert` and `ShowBoundingBoxes`. dkbot overrides `dll_Entry` and `dll_ClientConnect`.
+Besides the three `*_dll_Entry` points, `DLL_FindFunction` resolves 17 names: `dll_ClientThink`, `dll_ClientConnect`, `dll_ClientBegin`, `dll_ClientUserinfoChanged`, `dll_ClientDisconnect`, `dll_ClientBeginServerFrame`, `dll_SetStats`, `dll_Client_InitAttributes`, `dll_BeginIntermission`, `dll_LoadNodes`, `dll_EntityLoadCleanup`, `dll_RegisterWorldFuncs`, `dll_FLAG_GetScores`, `dll_FLAG_CheckRules`, `dll_DT_CanDamage`, `SIDEKICK_Alert` and `ShowBoundingBoxes`. dkbot overrides `dll_Entry`, `dll_ClientConnect` and `dll_ClientDisconnect`.

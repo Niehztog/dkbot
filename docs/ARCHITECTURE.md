@@ -16,7 +16,7 @@ Everything above `dkbot/dk_platform.h` is shared by Linux (`dk_platform_posix.c`
 
 ## The module
 
-- `entry.c` overrides `dll_Entry`, chaining to the engine's, for the server and level messages, and `dll_ClientConnect`, where a real client claiming a bot's edict takes it back.
+- `entry.c` overrides `dll_Entry`, chaining to the engine's, for the server and level messages, `dll_ClientConnect`, where a real client claiming a bot's edict takes it back, and `dll_ClientDisconnect`, where a bot the engine drops, by a kick, is forgotten; the engine frees its slot.
 - `frame.c` wraps `globals.RunFrame` at server init and every level load, but only while it holds the exported `P_RunFrame`.
 - `bots.c` runs each bot as a fake client: a free client edict, taken from `maxclients` down, goes through `ClientConnect`, `ClientUserinfoChanged` and `ClientBegin`, then gets a synthesized `usercmd_t` through `ClientThink` every frame. Bots spawn one per second, since spawn-point selection puts a batch on one point.
 - `clientbuf.c` re-arms each bot's engine slot every frame, since `SV_InitGame` reallocates `svs.clients`: `cs_spawned`, message buffers (a per-client send to a slot without them aborts the server), `lastmessage` and `idletime` against the timeout and idle kicks, qport -1, and on a listen server an address that keeps bot packets out of the host's loopback. Never swallow a per-client send instead: senders stage into a shared buffer that only the real call empties.
@@ -28,7 +28,7 @@ Everything above `dkbot/dk_platform.h` is shared by Linux (`dk_platform_posix.c`
   - the engine's own model table, `sv.configstrings` from `CS_MODELS`: it recognises pickups by model and finds a door's button by its `*n` model;
   - `ent = 0` from a trace that hits nothing, and Daikatana's see-through solid bits 0x80 and 0x200 in a player-clip mask, as the engine's player trace has them.
 - `snapshot.c` states what Daikatana's entities do not show in Quake II's conventions: player, alive, shooting, invulnerable and team go into `entity_state_t.modelindex2`, the timed effects and armour into `stats` 20..23 (`include/dk/dk_entstate.h`). Game-specific behaviour belongs in the AI forks (`botlib_patch/`), not in values forged for Quake II logic.
-- `cmd.c` records the game's client-command handlers as the game registers them through `AddCommand`, from `dll_ServerLoad`, so the hook goes in before that call; a bot's commands run through them. The library's `use <weapon>` becomes a weapon switch. `bot` is registered with `Cmd_AddCommand`, so only the console and rcon reach it.
+- `cmd.c` records the game's client-command handlers as the game registers them through `AddCommand`, from `dll_ServerLoad`, so the hook goes in before that call; a bot's commands run through them, with their arguments served by redirected `GetArgc`/`GetArgv`/`GetArgs`. `GetGameAPI` copies `gi` and `serverState` afresh at every server start, so the hooks and the redirect go in again at every message 12. The game registers `say` only on a listen server, so bots chat only there. The library's `use <weapon>` becomes a weapon switch. `bot` is registered with `Cmd_AddCommand`, so only the console and rcon reach it.
 - Without the library, its configs or the map's navigation data, the console says what is missing, `bot add` refuses and pending bots wait; a bot whose `BotSetupClient` fails is dropped.
 
 `tools/gen-botcfg.py` writes the library's configs into `botdata/daikatana/` from the game's `weapons.json`, and the same inventory numbers into `include/dk/dk_inventory.h`. Item indices start at 80 (`DK_ITEM_BASE`), clear of the Quake II slots the library reads by number; `inv.h` must also carry the library's own 200+ slots, or bots run without a character.
@@ -39,6 +39,7 @@ The library is linked `-Bsymbolic`: the engine exports its globals, and the libr
 
 - Daikatana is a Quake II fork: `usercmd_t` is Quake II's, `game_import_t`/`game_export_t` extend Quake II's. The world module talks to the engine through `serverState_t` (`gstate`), handed over by `dll_Entry` message 12; anything aimed at clients goes through it, not `gi`.
 - `gstate->mapName` is empty during `dll_LevelLoad`.
+- `GetGameAPI` runs when a server starts: the first map, and a map after `disconnect` or `killserver`. A map change on a running server sends `dll_LevelExit` and `dll_LevelLoad` only.
 - `edict_s` keeps Quake II's public header. `absmin`/`absmax` are the link box, one unit larger per side: take box constants from `PM_CheckDuck`.
 - `player_record_t.deaths` is never written.
 - `gi.cvar()` creates the cvar it reads, and an empty `teamplay` aborts the game: use `Cvar_VariableString`.

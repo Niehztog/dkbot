@@ -41,3 +41,10 @@ int dll_ClientConnect(userEntity_t *self, void *userinfo, int loadgame)
 	return dk_orig.dll_ClientConnect
 	       ? dk_orig.dll_ClientConnect(self, userinfo, loadgame) : 1;
 }
+
+void dll_ClientDisconnect(userEntity_t *self)
+{
+	dkbot_forget_edict((const edict_t *)self);
+	if (dk_orig.dll_ClientDisconnect)
+		dk_orig.dll_ClientDisconnect(self);
+}

@@ -187,20 +187,45 @@ static int find_free_slot(void)
 	return -1;
 }
 
-static void drop_bot(int idx, const char *why)
+/* ge->ClientDisconnect is our dll_ClientDisconnect: our own calls are not the engine's drops. */
+static int disconnecting;
+
+static void disconnect(edict_t *ent)
 {
 	dk_game_export_t *ge = dk_glob.ge;
 
-	if (idx < 0 || idx >= nbots)
+	if (!ge || !ge->ClientDisconnect || !ent)
 		return;
+	disconnecting = 1;
+	ge->ClientDisconnect(ent);
+	disconnecting = 0;
+}
+
+static void forget(int idx, const char *why)
+{
 	dk_log("dropping %s (slot %d): %s\n", bots[idx].name, bots[idx].slot, why);
 	if (bots[idx].botlib_ok && dkbot_botlib_active())
 		dkbot_botlib_shutdown_client(bots[idx].slot - 1);
-	if (ge && ge->ClientDisconnect && bots[idx].ent)
-		ge->ClientDisconnect(bots[idx].ent);
-	dkbot_release_client_slot(bots[idx].ent);
 	memmove(&bots[idx], &bots[idx + 1], sizeof bots[0] * (size_t)(nbots - idx - 1));
 	nbots--;
+}
+
+static void drop_bot(int idx, const char *why)
+{
+	if (idx < 0 || idx >= nbots)
+		return;
+	disconnect(bots[idx].ent);
+	dkbot_release_client_slot(bots[idx].ent);
+	forget(idx, why);
+}
+
+/* A kick drops the bot through the engine, which then frees its slot itself. */
+void dkbot_forget_edict(const edict_t *ent)
+{
+	struct bot *b = disconnecting ? NULL : bot_of(ent);
+
+	if (b)
+		forget((int)(b - bots), "the engine disconnected it");
 }
 
 /* By name, else the newest; returns the removed name (static) or NULL. */
@@ -492,15 +517,13 @@ void dkbot_level_load(void)
 
 void dkbot_level_exit(void)
 {
-	dk_game_export_t *ge = dk_glob.ge;
 	int i;
 
 	/* Forgotten only at the next level load: the game still messages them as it shuts down. */
 	for (i = 0; i < nbots; i++) {
 		if (!bots[i].ent)
 			continue;
-		if (ge && ge->ClientDisconnect)
-			ge->ClientDisconnect(bots[i].ent);
+		disconnect(bots[i].ent);
 		dkbot_release_client_slot(bots[i].ent);
 	}
 	carried = nbots + pending;

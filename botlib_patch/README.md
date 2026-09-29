@@ -21,7 +21,7 @@ Upstream code that reads a Quake II inventory slot we never fill is left alone o
 ## Deviations
 
 `be_ai2_dmdk.c`
-- Live-player test, `EntityIsShooting`, `BotUpdateBattleInventory`, `BotUpdateInventory`: entity and inventory facts from `modelindex2` and `stats` 20..23 (`include/dk/dk_entstate.h`).
+- `EntityIsDead`, `EntityIsShooting`, `BotUpdateBattleInventory`, `BotUpdateInventory`: entity and inventory facts from `modelindex2` and `stats` 20..23 (`include/dk/dk_entstate.h`).
 - `BotCheckAttack`: holds fire beyond the weapon's reach (`reach_<classname>` libvars), inside its own blast radius, and with the Zeus off target.
 - `BotAimAtEnemy`: leads and scatters by projectile speed and reach, not by Quake II weapon names.
 - `BotAggression`, `BotAttackMove`: weapon strength from the weapon config; a short-reach weapon fights within its reach.

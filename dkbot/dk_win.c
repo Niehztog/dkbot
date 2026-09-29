@@ -17,10 +17,12 @@
 /* From entry.c, declared loosely (dk_boundary.h clashes with <windows.h>): only addresses taken. */
 int  dll_Entry(void *hParent, unsigned int msg, void *pvData);
 int  dll_ClientConnect(void *self, void *userinfo, int loadgame);
+void dll_ClientDisconnect(void *self);
 
 static const struct { const char *name; void *fn; } g_overrides[] = {
-	{ "dll_Entry",         (void *)(uintptr_t)dll_Entry },
-	{ "dll_ClientConnect", (void *)(uintptr_t)dll_ClientConnect },
+	{ "dll_Entry",            (void *)(uintptr_t)dll_Entry },
+	{ "dll_ClientConnect",    (void *)(uintptr_t)dll_ClientConnect },
+	{ "dll_ClientDisconnect", (void *)(uintptr_t)dll_ClientDisconnect },
 };
 
 static HMODULE g_self;

@@ -41,6 +41,11 @@
 #include "l_libvar.h"
 #include "l_memory.h"
 #include "l_utils.h"
+//
+#include "chars.h"				//characteristics
+#include "inv.h"				//indexes into the inventory
+#include "syn.h"				//synonyms
+#include "match.h"				//string matching types and vars
 
 /* dkbot: weaponinfo_t has no range, so reach arrives as reach_<classname> libvars; 0 means unknown */
 #define DK_MAX_REACH_CACHE 64
@@ -162,17 +167,17 @@ void __cdecl BotEntityInfo(bot_state_t *bs, _DWORD *info)
   info[11] = *(int *)&bs->thinktime;
   v3 = info[24] & ~MFL_ONGROUND;
   info[24] = v3;
-  if ( (bs->snapshot.pm_flags & 4) != 0 )
+  if ( (bs->snapshot.pm_flags & PMF_ON_GROUND) != 0 )
     info[24] = v3 | MFL_ONGROUND;
   v4 = info[24] & ~MFL_TELEPORTED;
   info[24] = v4;
-  if ( (bs->snapshot.pm_flags & 0x20) != 0 && bs->snapshot.pm_time > 0 )
+  if ( (bs->snapshot.pm_flags & PMF_TIME_TELEPORT) != 0 && bs->snapshot.pm_time > 0 )
     info[24] = v4 | MFL_TELEPORTED;
   v5 = info[24] & ~MFL_WATERJUMP;
   info[24] = v5;
-  if ( (bs->snapshot.pm_flags & 8) != 0 && bs->snapshot.pm_time > 0 )
+  if ( (bs->snapshot.pm_flags & PMF_TIME_WATERJUMP) != 0 && bs->snapshot.pm_time > 0 )
     info[24] = v5 | MFL_WATERJUMP;
-  if ( (bs->snapshot.pm_flags & 1) != 0 )
+  if ( (bs->snapshot.pm_flags & PMF_DUCKED) != 0 )
     info[12] = PRESENCE_CROUCH;
   else
     info[12] = PRESENCE_NORMAL;
@@ -205,20 +210,20 @@ void __cdecl BotUpdateInventory(bot_state_t *bs)
 
   inventory = bs->inventory;
   stats = bs->snapshot.stats;
-  inventory[INVENTORY_HEALTH] = stats[1];
-  if ( stats[9] )
+  inventory[INVENTORY_HEALTH] = stats[STAT_HEALTH];
+  if ( stats[STAT_TIMER_ICON] )
   {
-    name = AAS_ImageFromIndex(stats[9]);
+    name = AAS_ImageFromIndex(stats[STAT_TIMER_ICON]);
     if ( !_strcmpi(name, "p_quad") )
-      bs->quad_endtime = AAS_Time() + (float)stats[10];
+      bs->quad_endtime = AAS_Time() + (float)stats[STAT_TIMER];
     else if ( !_strcmpi(name, "p_invulnerability") )
-      bs->invulnerability_endtime = AAS_Time() + (float)stats[10];
+      bs->invulnerability_endtime = AAS_Time() + (float)stats[STAT_TIMER];
     else if ( !_strcmpi(name, "p_rebreather") )
-      bs->rebreather_endtime = AAS_Time() + (float)stats[10];
+      bs->rebreather_endtime = AAS_Time() + (float)stats[STAT_TIMER];
     else if ( !_strcmpi(name, "p_envirosuit") )
-      bs->enviro_endtime = AAS_Time() + (float)stats[10];
+      bs->enviro_endtime = AAS_Time() + (float)stats[STAT_TIMER];
   }
-  /* dkbot: timed effects arrive as seconds left; stats[9] is never filled */
+  /* dkbot: timed effects arrive as seconds left; STAT_TIMER_ICON is never filled */
   if ( stats[DK_STAT_INVULN_SECS] > 0 )
     bs->invulnerability_endtime = AAS_Time() + (float)stats[DK_STAT_INVULN_SECS];
   if ( stats[DK_STAT_OXYLUNG_SECS] > 0 )
@@ -226,32 +231,32 @@ void __cdecl BotUpdateInventory(bot_state_t *bs)
   if ( stats[DK_STAT_ENVIROSUIT_SECS] > 0 )
     bs->enviro_endtime = AAS_Time() + (float)stats[DK_STAT_ENVIROSUIT_SECS];
   inventory[DK_INVENTORY_ARMOR] = stats[DK_STAT_ARMOR];  /* dkbot */
-  inventory[QUAD_SECONDS] = bs->quad_endtime - AAS_Time();
-  if ( inventory[QUAD_SECONDS] <= 0 )
-    inventory[QUAD_SECONDS] = 0;
-  inventory[INVULNERABILITY_SECONDS] = bs->invulnerability_endtime - AAS_Time();
-  if ( inventory[INVULNERABILITY_SECONDS] <= 0 )
-    inventory[INVULNERABILITY_SECONDS] = 0;
-  inventory[REBREATHER_SECONDS] = bs->rebreather_endtime - AAS_Time();
-  if ( inventory[REBREATHER_SECONDS] <= 0 )
-    inventory[REBREATHER_SECONDS] = 0;
-  inventory[ENVIROSUIT_SECONDS] = bs->enviro_endtime - AAS_Time();
-  if ( inventory[ENVIROSUIT_SECONDS] <= 0 )
-    inventory[ENVIROSUIT_SECONDS] = 0;
-  if ( stats[4] )
+  inventory[USING_QUAD] = bs->quad_endtime - AAS_Time();
+  if ( inventory[USING_QUAD] <= 0 )
+    inventory[USING_QUAD] = 0;
+  inventory[USING_INVULNERABILITY] = bs->invulnerability_endtime - AAS_Time();
+  if ( inventory[USING_INVULNERABILITY] <= 0 )
+    inventory[USING_INVULNERABILITY] = 0;
+  inventory[USING_REBREATHER] = bs->rebreather_endtime - AAS_Time();
+  if ( inventory[USING_REBREATHER] <= 0 )
+    inventory[USING_REBREATHER] = 0;
+  inventory[USING_ENVIRONMENTSUIT] = bs->enviro_endtime - AAS_Time();
+  if ( inventory[USING_ENVIRONMENTSUIT] <= 0 )
+    inventory[USING_ENVIRONMENTSUIT] = 0;
+  if ( stats[STAT_ARMOR_ICON] )
   {
-    name = AAS_ImageFromIndex(stats[4]);
+    name = AAS_ImageFromIndex(stats[STAT_ARMOR_ICON]);
     if ( !_strcmpi(name, "i_powershield") )
       bs->powerscreen_seen_time = AAS_Time();
     if ( bs->powerscreen_seen_time > AAS_Time() - 0.9 )
     {
-      inventory[POWER_SCREEN_CELLS] = inventory[20];  /* inventory[20] = power shield cells */
-      inventory[POWER_SHIELD_CELLS] = inventory[20];
+      inventory[USING_POWERSCREEN] = inventory[INVENTORY_CELLS];
+      inventory[USING_POWERSHIELD] = inventory[INVENTORY_CELLS];
     }
     else
     {
-      inventory[POWER_SCREEN_CELLS] = 0;
-      inventory[POWER_SHIELD_CELLS] = 0;
+      inventory[USING_POWERSCREEN] = 0;
+      inventory[USING_POWERSHIELD] = 0;
     }
   }
 }
@@ -284,22 +289,22 @@ void __cdecl BotUpdateBattleInventory(bot_state_t *bs, int enemy)
  * site confirms the parameter type; bot_state_t * matches both neighbours. */
 int __cdecl sub_100214E0(bot_state_t *p)
 {
-  return p->snapshot.stats[16];
+  return p->snapshot.stats[STAT_CHASE];
 }
 
 // gladiator.dll: 10021500..100215A4
 // gladi386.so:   0002C028..0002C0DB
 void __cdecl BotBattleUseItems(bot_state_t *bs)
 {
-  if ( bs->inventory[25] > 0 )                     /* +1828 silencer ammo */
+  if ( bs->inventory[INVENTORY_SILENCER] > 0 )
     EA_UseItem(bs->client, "Silencer");
-  if ( (AAS_PointContents(bs->eye) & 0x38) != 0
-       && !bs->inventory[REBREATHER_SECONDS]
-       && bs->inventory[26] > 0 )                  /* +1832 rebreather charges */
+  if ( (AAS_PointContents(bs->eye) & (CONTENTS_WATER|CONTENTS_SLIME|CONTENTS_LAVA)) != 0
+       && !bs->inventory[USING_REBREATHER]
+       && bs->inventory[INVENTORY_REBREATHER] > 0 )
     EA_UseItem(bs->client, "Rebreather");
-  if ( !bs->inventory[POWER_SHIELD_CELLS] && bs->inventory[6] > 0 )   /* +1752 */
+  if ( !bs->inventory[USING_POWERSHIELD] && bs->inventory[INVENTORY_POWERSHIELD] > 0 )
     EA_UseItem(bs->client, "Power Shield");
-  if ( !bs->inventory[POWER_SCREEN_CELLS] && bs->inventory[5] > 0 )   /* +1748 */
+  if ( !bs->inventory[USING_POWERSCREEN] && bs->inventory[INVENTORY_POWERSCREEN] > 0 )
     EA_UseItem(bs->client, "Power Screen");
 }
 
@@ -307,12 +312,12 @@ void __cdecl BotBattleUseItems(bot_state_t *bs)
 // gladi386.so:   0002C0DC..0002C13B
 void __cdecl sub_100215E0(bot_state_t *bs)
 {
-  if ( !bs->inventory[QUAD_SECONDS] && bs->inventory[23] > 0 )   /* +1820 quad ammo */
+  if ( !bs->inventory[USING_QUAD] && bs->inventory[INVENTORY_QUAD] > 0 )
   {
     EA_UseItem(bs->client, "Quad Damage");
     return;
   }
-  if ( !bs->inventory[INVULNERABILITY_SECONDS] && bs->inventory[24] > 0 ) /* +1824 invuln ammo */
+  if ( !bs->inventory[USING_INVULNERABILITY] && bs->inventory[INVENTORY_INVULNERABILITY] > 0 )
     EA_UseItem(bs->client, "Invulnerability");
 }
 
@@ -322,10 +327,9 @@ int __cdecl BotCTFCarryingFlag(bot_state_t *bs)
 {
   if ( ctf->value == 0.0f )
     return 0;
-  /* inventory[43]=RED FLAG, inventory[44]=BLUE FLAG (Q2 CTF item indices).  Returns
-   * 1 (red), 2 (blue), or 0.  Four separate `return` statements, not a ternary on the
-   * last pair: gcc cross-jumps the trailing `return 0` back onto the first one, where
-   * a ternary would pre-zero eax. */
+  /* Returns 1 (red flag), 2 (blue flag), or 0.  Four separate `return` statements,
+   * not a ternary on the last pair: gcc cross-jumps the trailing `return 0` back
+   * onto the first one, where a ternary would pre-zero eax. */
   /* dkbot */
   if ( bs->inventory[DK_INVENTORY_FLAG_TEAM1] > 0 )
     return 1;
@@ -341,31 +345,36 @@ BOOL __cdecl BotIsDead(bot_state_t *bs)
   int v1; // eax
 
   v1 = bs->snapshot.pm_type;
-  return v1 == 2 || v1 == 3;
+  return v1 == PM_DEAD || v1 == PM_GIB;
 }
 
 // gladiator.dll: 100216D0..100216DE
 // gladi386.so:   0002C1A4..0002C1B5
 BOOL __cdecl BotIsObserver(bot_state_t *bs)
 {
-  return bs->snapshot.pm_type == 1;
+  return bs->snapshot.pm_type == PM_SPECTATOR;
 }
 
 // gladiator.dll: 100216F0..100216FE
 // gladi386.so:   0002C1B8..0002C1C9
 BOOL __cdecl BotIntermission(bot_state_t *bs)
 {
-  return bs->snapshot.pm_type == 4;
+  return bs->snapshot.pm_type == PM_FREEZE;
 }
 
 // gladiator.dll: 10021710..10021752
 // gladi386.so:   0002C1CC..0002C223
-BOOL __cdecl sub_10021710(int *a1)
+/* Q3's EntityIsDead: its signature, its slot right before EntityIsShooting, and
+ * its four callers, BotFindEnemy's skip test and the three AI nodes' enemy-dead
+ * tests.  The body is the Q2 test, where Q3 asks the client's pm_type: a gib or a
+ * corpse with flies, a client without the player model, or a client in a death
+ * frame (173..197). */
+BOOL __cdecl EntityIsDead(aas_entityinfo_t *entinfo)
 {
-  /* dkbot: player and alive come from modelindex2, a1[24] */
-  if ( a1[3] < 1 || a1[3] > botlibglobals.num_clients )
+  /* dkbot: player and alive come from modelindex2 */
+  if ( entinfo->number < 1 || entinfo->number > botlibglobals.num_clients )
     return 1;
-  if ( (a1[24] & DK_ENT_PLAYER) == 0 || (a1[24] & DK_ENT_ALIVE) == 0 )
+  if ( (entinfo->modelindex2 & DK_ENT_PLAYER) == 0 || (entinfo->modelindex2 & DK_ENT_ALIVE) == 0 )
     return 1;
   return 0;
 }
@@ -529,24 +538,34 @@ BOOL __cdecl BotValidChatPosition(bot_state_t *bs)
 
   if ( BotIsDead(bs) )
     return 1;
-  if ( (bs->snapshot.pm_flags & 4) == 0 )
+  if ( (bs->snapshot.pm_flags & PMF_ON_GROUND) == 0 )
     return 0;
   VectorCopy(bs->origin, point);
   point[2] = point[2] - 24.0f;
   v4 = (char)AAS_PointContents(point);
-  if ( (v4 & 0x18) != 0 )           /* CONTENTS_LAVA(8) | CONTENTS_SLIME(16) */
+  if ( (v4 & (CONTENTS_LAVA|CONTENTS_SLIME)) != 0 )
     return 0;
   VectorCopy(bs->origin, point);
   point[2] = point[2] + 32.0f;
   v7 = (char)AAS_PointContents(point);
-  if ( (v7 & 0x38) != 0 )           /* CONTENTS_LAVA(8) | SLIME(16) | WATER(32) */
+  if ( (v7 & MASK_WATER) != 0 )
     return 0;
   VectorCopy(bs->origin, start);
   VectorCopy(bs->origin, end);
   start[2] = start[2] + 1.0f;
   end[2] = end[2] - 100.0f;
   AAS_PresenceTypeBoundingBox(PRESENCE_CROUCH, (float *)mins, (float *)maxs);
+  /* Both images pass 4 as passent and the client number as the content mask
+   * (push [esi+4], push 4 @10021ccf; the same pair @2c768), so for an even
+   * client the mask lacks CONTENTS_SOLID and the trace can only report the
+   * world.  GLAD_SERVERFIX(chat-position-trace-args) builds Q3's call,
+   * BotAI_Trace(..., bs->client, MASK_SOLID), in Gladiator's terms: the bot's
+   * own entity, which is bs->entitynum here, and Q2's MASK_SOLID. */
+#if GLAD_SERVERFIX /* GLAD_SERVERFIX(chat-position-trace-args) */
+  trace = AAS_Trace(start, (float*)mins, (float*)maxs, end, bs->entitynum, MASK_SOLID);
+#else
   trace = AAS_Trace(start, (float*)mins, (float*)maxs, end, 4, bs->client);
+#endif
   if ( trace.ent != 0 )
     return 0;
   return 1;
@@ -565,7 +584,7 @@ BOOL __cdecl BotChat_EnterGame(bot_state_t *bs)
   v1 = nochat->value;
   if ( v1 != 0.0f )
     return 0;
-  rnd = (float)Characteristic_BFloat(BotCharacter(bs), 18, 0.0, 1.0);
+  rnd = (float)Characteristic_BFloat(BotCharacter(bs), CHARACTERISTIC_CHAT_ENTEREXITGAME, 0.0, 1.0);
   if ( fastchat->value == 0.0f )
   {
     if ( random() > rnd )
@@ -589,7 +608,7 @@ int __cdecl BotChat_ExitGame(bot_state_t *bs)
 
   if ( nochat->value != 0.0f )
     return 0;
-  rnd = (float)Characteristic_BFloat(BotCharacter(bs), 18, 0.0, 1.0);
+  rnd = (float)Characteristic_BFloat(BotCharacter(bs), CHARACTERISTIC_CHAT_ENTEREXITGAME, 0.0, 1.0);
   if ( fastchat->value == 0.0f )
   {
     if ( random() > rnd )
@@ -610,7 +629,7 @@ int __cdecl BotChat_StartLevel(bot_state_t *bs)
 
   if ( nochat->value != 0.0f )
     return 0;
-  rnd = (float)Characteristic_BFloat(BotCharacter(bs), 17, 0.0, 1.0);
+  rnd = (float)Characteristic_BFloat(BotCharacter(bs), CHARACTERISTIC_CHAT_STARTENDLEVEL, 0.0, 1.0);
   if ( fastchat->value == 0.0f )
   {
     if ( random() > rnd )
@@ -631,7 +650,7 @@ int __cdecl BotChat_EndLevel(bot_state_t *bs)
 
   if ( nochat->value != 0.0f )
     return 0;
-  rnd = (float)Characteristic_BFloat(BotCharacter(bs), 17, 0.0, 1.0);
+  rnd = (float)Characteristic_BFloat(BotCharacter(bs), CHARACTERISTIC_CHAT_STARTENDLEVEL, 0.0, 1.0);
   if ( fastchat->value == 0.0f )
   {
     if ( random() > rnd )
@@ -656,7 +675,7 @@ int __cdecl BotChat_Death(int *bs)
   v1 = nochat->value;
   if ( v1 != 0.0f )
     return 0;
-  v6 = (float)Characteristic_BFloat(BotCharacter((bot_state_t *)bs), 20, 0.0, 1.0);
+  v6 = (float)Characteristic_BFloat(BotCharacter((bot_state_t *)bs), CHARACTERISTIC_CHAT_DEATH, 0.0, 1.0);
   if ( fastchat->value == 0.0f )
   {
     if ( random() > v6 )
@@ -667,15 +686,14 @@ int __cdecl BotChat_Death(int *bs)
     EasyClientName(v4 - 1, v7);
   else
     strcpy(v7, "");
-  if ( bs[693] == 12 )
+  if ( bs[693] == ST_DEATH_BFG )
   {
     BotInitialChat(bs + 995, "death_bfg", v7, (char *)0);
   }
   else
   {
     v5 = random();
-    /* Characteristic 15 is the praise-vs-insult probability. */
-    v8 = (float)Characteristic_BFloat(BotCharacter((bot_state_t *)bs), 15, 0.0, 1.0);
+    v8 = (float)Characteristic_BFloat(BotCharacter((bot_state_t *)bs), CHARACTERISTIC_CHAT_INSULT, 0.0, 1.0);
     if ( v5 < v8 )
       BotInitialChat(bs + 995, "death_insult", v7, (char *)0);
     else
@@ -699,7 +717,7 @@ BOOL __cdecl BotChat_Kill(int *bs)
   v1 = nochat->value;
   if ( v1 != 0.0f )
     return 0;
-  rnd = (float)Characteristic_BFloat(BotCharacter((bot_state_t *)bs), 19, 0.0, 1.0);
+  rnd = (float)Characteristic_BFloat(BotCharacter((bot_state_t *)bs), CHARACTERISTIC_CHAT_KILL, 0.0, 1.0);
   if ( fastchat->value == 0.0f )
   {
     if ( random() > rnd )
@@ -713,15 +731,14 @@ BOOL __cdecl BotChat_Kill(int *bs)
     EasyClientName(v4 - 1, name);
   else
     strcpy(name, "");
-  if ( bs[692] == 13 )
+  if ( bs[692] == ST_DEATH_TELEFRAG )
   {
     BotInitialChat(bs + 995, "kill_telefrag", name, (char *)0);
   }
   else
   {
     v5 = random();
-    /* Characteristic 15 is the praise-vs-insult probability. */
-    v8 = (float)Characteristic_BFloat(BotCharacter((bot_state_t *)bs), 15, 0.0, 1.0);
+    v8 = (float)Characteristic_BFloat(BotCharacter((bot_state_t *)bs), CHARACTERISTIC_CHAT_INSULT, 0.0, 1.0);
     if ( v5 < v8 )
       BotInitialChat(bs + 995, "kill_insult", name, (char *)0);
     else
@@ -743,8 +760,7 @@ int __cdecl BotChat_Random(bot_state_t *bs)
     return 0;
   if ( bs->ltgtype == 1 || bs->ltgtype == 2 || bs->ltgtype == 5 )
     return 0;
-  /* Characteristic 21 is the random-chat probability. */
-  rnd = (float)Characteristic_BFloat(BotCharacter(bs), 21, 0.0f, 1.0f);
+  rnd = (float)Characteristic_BFloat(BotCharacter(bs), CHARACTERISTIC_CHAT_RANDOM, 0.0f, 1.0f);
   if ( random() > bs->thinktime * 0.1 )
     return 0;
   if ( fastchat->value == 0.0f )
@@ -754,7 +770,7 @@ int __cdecl BotChat_Random(bot_state_t *bs)
   }
   if ( !BotValidChatPosition(bs) )
     return 0;
-  if ( random() < Characteristic_BFloat(BotCharacter(bs), 16, 0.0f, 1.0f) )
+  if ( random() < Characteristic_BFloat(BotCharacter(bs), CHARACTERISTIC_CHAT_MISC, 0.0f, 1.0f) )
   {
     BotInitialChat(&bs->chatstate, "random_misc", (char *)0);
     return 1;
@@ -770,7 +786,7 @@ float __cdecl BotChatTime(bot_state_t *bs)
 
   int cpm; // [esp+4h] [ebp-4h]
 
-  cpm = Characteristic_BInteger(BotCharacter(bs), 14, 1, 4000);
+  cpm = Characteristic_BInteger(BotCharacter(bs), CHARACTERISTIC_CHAT_CPM, 1, 4000);
   return (int)BotChatLength(&bs->chatstate) * 30.0f / cpm;
 }
 
@@ -780,13 +796,13 @@ float __cdecl BotAggression(bot_state_t *bs)
 {
   int v2; // ecx
 
-  if ( bs->inventory[INVULNERABILITY_SECONDS] )
+  if ( bs->inventory[USING_INVULNERABILITY] )
     return 100.0f;
   if ( bs->inventory[ENEMY_INVULNERABILITY] )
     return 0.0f;
-  if ( bs->inventory[ENEMY_QUAD] && !bs->inventory[QUAD_SECONDS] )
+  if ( bs->inventory[ENEMY_QUAD] && !bs->inventory[USING_QUAD] )
     return 0.0f;
-  if ( bs->inventory[ENEMY_POWERSCREEN] && (!bs->inventory[POWER_SCREEN_CELLS] || ((int *)bs)[452] < 50) )
+  if ( bs->inventory[ENEMY_POWERSCREEN] && (!bs->inventory[USING_POWERSCREEN] || bs->inventory[INVENTORY_CELLS] < 50) )
     return 0.0f;
   if ( bs->inventory[ENEMY_HEIGHT] > 200 )
     return 0.0f;
@@ -855,20 +871,20 @@ BOOL BotCanAndWantsToRocketJump(bot_state_t *bs)
 {
   int v3;
 
-  if ( ((int *)bs)[446] <= 0 )
+  if ( bs->inventory[INVENTORY_ROCKETLAUNCHER] <= 0 )
     return 0;
-  if ( ((int *)bs)[453] < 3 )
+  if ( bs->inventory[INVENTORY_ROCKETS] < 3 )
     return 0;
-  if ( bs->inventory[QUAD_SECONDS] )
+  if ( bs->inventory[USING_QUAD] )
     return 0;
-  if ( bs->inventory[INVULNERABILITY_SECONDS] )
+  if ( bs->inventory[USING_INVULNERABILITY] )
     return 1;
   v3 = bs->inventory[INVENTORY_HEALTH];
   if ( v3 < 60 )
     return 0;
-  if ( v3 < 90 && ((int *)bs)[433] < 40 && ((int *)bs)[434] < 50 && ((int *)bs)[435] < 60 )
+  if ( v3 < 90 && bs->inventory[INVENTORY_ARMORBODY] < 40 && bs->inventory[INVENTORY_ARMORCOMBAT] < 50 && bs->inventory[INVENTORY_ARMORJACKET] < 60 )
     return 0;
-  if ( Characteristic_BFloat(BotCharacter(bs), 26, 0.0, 1.0) < 0.5 )
+  if ( Characteristic_BFloat(BotCharacter(bs), CHARACTERISTIC_WEAPONJUMPING, 0.0, 1.0) < 0.5 )
     return 0;
   return 1;
 }
@@ -899,7 +915,7 @@ void __cdecl BotRoamGoal(bot_state_t *bs, vec3_t goal)
       bestorg[1] += sign * 700 * random() + 50;
     }
     bestorg[2] += random() * 144 - 96 - 1;
-    trace = AAS_Trace(bs->origin, NULL, NULL, bestorg, bs->entitynum, 3);
+    trace = AAS_Trace(bs->origin, NULL, NULL, bestorg, bs->entitynum, MASK_SOLID);
     VectorSubtract(bestorg, bs->origin, dir);
     len = VectorNormalize(dir);
     if ( len > 100 )
@@ -908,12 +924,12 @@ void __cdecl BotRoamGoal(bot_state_t *bs, vec3_t goal)
       VectorAdd(bs->origin, dir, bestorg);
       VectorCopy(bestorg, belowbestorg);
       belowbestorg[2] -= 800;
-      trace = AAS_Trace(bestorg, NULL, NULL, belowbestorg, bs->entitynum, 3);
+      trace = AAS_Trace(bestorg, NULL, NULL, belowbestorg, bs->entitynum, MASK_SOLID);
       if ( !trace.startsolid )
       {
         trace.endpos[2]++;
         pc = AAS_PointContents(trace.endpos);
-        if ( !(pc & 0x18) )
+        if ( !(pc & (CONTENTS_LAVA | CONTENTS_SLIME)) )
         {
           VectorCopy(bestorg, goal);
           return;
@@ -947,11 +963,13 @@ bot_moveresult_t __cdecl BotAttackMove(bot_state_t *bs, int tfl)
     return BotMoveToGoal((bot_movestate_t *)&bs->ms, &goal, tfl);
   }
   memset(&moveresult, 0, sizeof(bot_moveresult_t));
-  if ( random() < Characteristic_BFloat(BotCharacter(bs), 48, 0, 1) )
+  /* chars.h: "does the bot client eat pizza while playing Q2".  One that does skips
+   * its attack movement. */
+  if ( random() < Characteristic_BFloat(BotCharacter(bs), CHARACTERISTIC_PIZZAPREFERENCE, 0, 1) )
     return moveresult;
-  attack_skill = Characteristic_BFloat(BotCharacter(bs), 4, 0, 1);
-  jumper = Characteristic_BFloat(BotCharacter(bs), 25, 0, 1);
-  croucher = Characteristic_BFloat(BotCharacter(bs), 24, 0, 1);
+  attack_skill = Characteristic_BFloat(BotCharacter(bs), CHARACTERISTIC_ATTACK_SKILL, 0, 1);
+  jumper = Characteristic_BFloat(BotCharacter(bs), CHARACTERISTIC_JUMPER, 0, 1);
+  croucher = Characteristic_BFloat(BotCharacter(bs), CHARACTERISTIC_CROUCHER, 0, 1);
   if ( attack_skill < 0.2 )
     return moveresult;
   BotEntityInfo(bs, (_DWORD *)&bs->ms);
@@ -981,13 +999,13 @@ bot_moveresult_t __cdecl BotAttackMove(bot_state_t *bs, int tfl)
     movetype = MOVE_CROUCH;
   if ( movetype == MOVE_JUMP )
   {
-    if ( bs->flags & 4 )
+    if ( bs->flags & BFL_ATTACKJUMPED )
     {
-      bs->flags &= ~4;
+      bs->flags &= ~BFL_ATTACKJUMPED;
       movetype = MOVE_WALK;
     }
     else
-      bs->flags |= 4;
+      bs->flags |= BFL_ATTACKJUMPED;
   }
   if ( attack_skill <= 0.4 )
   {
@@ -1011,7 +1029,7 @@ bot_moveresult_t __cdecl BotAttackMove(bot_state_t *bs, int tfl)
   {
     if ( random() > 0.935 )
     {
-      bs->flags ^= 1;
+      bs->flags ^= BFL_STRAFERIGHT;
       bs->attackstrafe_drift = 0;
     }
   }
@@ -1022,7 +1040,7 @@ bot_moveresult_t __cdecl BotAttackMove(bot_state_t *bs, int tfl)
     hordir[2] = 0;
     VectorNormalize(hordir);
     CrossProduct(hordir, up, sideward);
-    if ( bs->flags & 1 )
+    if ( bs->flags & BFL_STRAFERIGHT )
     {
       sideward[0] = -sideward[0];
       sideward[1] = -sideward[1];
@@ -1041,7 +1059,7 @@ bot_moveresult_t __cdecl BotAttackMove(bot_state_t *bs, int tfl)
     }
     if ( BotMoveInDirection((bot_movestate_t *)&bs->ms, sideward, 400, movetype) )
       return moveresult;
-    bs->flags ^= 1;
+    bs->flags ^= BFL_STRAFERIGHT;
     bs->attackstrafe_drift = 0;
   }
   return moveresult;
@@ -1074,7 +1092,8 @@ BOOL __cdecl BotSameTeam(bot_state_t *bs, int entnum)
   if ( teamplay_shell->value != 0.0f )
   {
     botinfo = AAS_EntityInfo(bs->entitynum);
-    return (botinfo.renderfx & 0x1C00) == (entinfo.renderfx & 0x1C00);
+    return (botinfo.renderfx & (RF_SHELL_RED|RF_SHELL_GREEN|RF_SHELL_BLUE))
+        == (entinfo.renderfx & (RF_SHELL_RED|RF_SHELL_GREEN|RF_SHELL_BLUE));
   }
   if ( ch->value != 0.0f )
   {
@@ -1088,7 +1107,7 @@ BOOL __cdecl BotSameTeam(bot_state_t *bs, int entnum)
       return 1;
     return 0;
   }
-  else if ( ((int)dmflags->value & 0x40) || ctf->value != 0.0f )
+  else if ( ((int)dmflags->value & DF_SKINTEAMS) || ctf->value != 0.0f )
   {
     /* dkbot: the team is in modelindex2; 0 is none */
     int mine, yours;
@@ -1099,7 +1118,7 @@ BOOL __cdecl BotSameTeam(bot_state_t *bs, int entnum)
     if ( mine && mine == yours )
       return 1;
   }
-  else if ( (int)dmflags->value & 0x80 )
+  else if ( (int)dmflags->value & DF_MODELTEAMS )
   {
     team1 = strchr(ClientSkin(bs->client), '/');
     if ( team1 )
@@ -1149,7 +1168,10 @@ int __cdecl BotFindEnemy(bot_state_t *bs)
   aas_entityinfo_t entinfo;
   vec3_t dir, angles;
 
-  alertness = Characteristic_BInteger(BotCharacter(bs), 45, 0, 1);
+  /* chars.h's 3D-accelerator characteristic, an integer 0 or 1: without one the bot
+   * sees no enemy beyond 900 units.  Q3 scales that range by CHARACTERISTIC_ALERTNESS
+   * instead, whence the local's name. */
+  alertness = Characteristic_BInteger(BotCharacter(bs), CHARACTERISTIC_3DACCELERATOR, 0, 1);
   //check if the health decreased
   healthdecrease = bs->lasthealth > bs->inventory[INVENTORY_HEALTH];
   //remember the current health value
@@ -1159,7 +1181,7 @@ int __cdecl BotFindEnemy(bot_state_t *bs)
   {
     entinfo = AAS_EntityInfo(ents[i]);
     //if the enemy isn't dead and the enemy isn't the bot self
-    if ( sub_10021710((int *)&entinfo) || entinfo.number == bs->entitynum )
+    if ( EntityIsDead(&entinfo) || entinfo.number == bs->entitynum )
       continue;
     //calculate the distance towards the enemy
     VectorSubtract(entinfo.origin, bs->origin, dir);
@@ -1227,8 +1249,8 @@ void BotAimAtEnemy(bot_state_t *bs)
 
   if ( bs->enemy )
   {
-    aim_skill = Characteristic_BFloat(BotCharacter(bs), 7, 0, 1);
-    aim_accuracy = Characteristic_BFloat(BotCharacter(bs), 8, 0, 1);
+    aim_skill = Characteristic_BFloat(BotCharacter(bs), CHARACTERISTIC_AIM_SKILL, 0, 1);
+    aim_accuracy = Characteristic_BFloat(BotCharacter(bs), CHARACTERISTIC_AIM_ACCURACY, 0, 1);
     //
     if ( aim_accuracy <= 0 )
       aim_accuracy = 0.0001f;
@@ -1248,7 +1270,7 @@ void BotAimAtEnemy(bot_state_t *bs)
     start[2] += bs->snapshot.viewoffset[2];
     start[2] += wi->offset[2];
     //
-    trace = AAS_Trace(start, mins, maxs, bestorigin, bs->entitynum, 100663299);
+    trace = AAS_Trace(start, mins, maxs, bestorigin, bs->entitynum, MASK_SHOT);
     //if the enemy is NOT hit
     if ( trace.fraction <= 1 && trace.ent != entinfo.number )
       bestorigin[2] += 16;
@@ -1269,7 +1291,7 @@ void BotAimAtEnemy(bot_state_t *bs)
       VectorMA(entinfo.origin, (dist / wi->speed) * speed, dir, bestorigin);
     }
     //if the projectile does radial damage
-    if ( aim_skill > 0.6 && (wi->proj->damagetype & 2) )
+    if ( aim_skill > 0.6 && (wi->proj->damagetype & DAMAGETYPE_RADIAL) )
     {
       //if the enemy isn't standing significantly higher than the bot
       if ( entinfo.origin[2] < bs->origin[2] + 16 )
@@ -1277,7 +1299,7 @@ void BotAimAtEnemy(bot_state_t *bs)
         //try to aim at the ground in front of the enemy
         VectorCopy(entinfo.origin, end);
         end[2] -= 64;
-        trace = AAS_Trace(entinfo.origin, NULL, NULL, end, entinfo.number, 100663299);
+        trace = AAS_Trace(entinfo.origin, NULL, NULL, end, entinfo.number, MASK_SHOT);
         //
         VectorCopy(bestorigin, groundtarget);
         if ( trace.startsolid )
@@ -1285,7 +1307,7 @@ void BotAimAtEnemy(bot_state_t *bs)
         else
           groundtarget[2] = trace.endpos[2] - 8;
         //trace a line from projectile start to ground target
-        trace = AAS_Trace(start, NULL, NULL, groundtarget, bs->entitynum, 100663299);
+        trace = AAS_Trace(start, NULL, NULL, groundtarget, bs->entitynum, MASK_SHOT);
         //if hitpoint is not vertically too far from the ground target
         if ( fabs(trace.endpos[2] - groundtarget[2]) < 50 )
         {
@@ -1298,7 +1320,7 @@ void BotAimAtEnemy(bot_state_t *bs)
             if ( VectorLength(dir) > 150 )
             {
               //check if the bot is visible from the ground target
-              trace = AAS_Trace(trace.endpos, NULL, NULL, entinfo.origin, entinfo.number, 100663299);
+              trace = AAS_Trace(trace.endpos, NULL, NULL, entinfo.origin, entinfo.number, MASK_SHOT);
               if ( trace.fraction >= 1 )
                 VectorCopy(groundtarget, bestorigin);
             }
@@ -1328,10 +1350,10 @@ void BotAimAtEnemy(bot_state_t *bs)
     //set the ideal view angles
     Vector2Angles(dir, bs->ideal_viewangles);
     //take the weapon spread into account for lower skilled bots
-    bs->ideal_viewangles[0] += 6 * wi->vspread * crandom() * (1 - aim_accuracy);
-    bs->ideal_viewangles[0] = anglemod(bs->ideal_viewangles[0]);
-    bs->ideal_viewangles[1] += 6 * wi->hspread * crandom() * (1 - aim_accuracy);
-    bs->ideal_viewangles[1] = anglemod(bs->ideal_viewangles[1]);
+    bs->ideal_viewangles[PITCH] += 6 * wi->vspread * crandom() * (1 - aim_accuracy);
+    bs->ideal_viewangles[PITCH] = anglemod(bs->ideal_viewangles[PITCH]);
+    bs->ideal_viewangles[YAW] += 6 * wi->hspread * crandom() * (1 - aim_accuracy);
+    bs->ideal_viewangles[YAW] = anglemod(bs->ideal_viewangles[YAW]);
     BotChangeViewAngles(bs, bs->thinktime);
     if ( aim_accuracy > 0.8 )
     {
@@ -1388,7 +1410,7 @@ void BotCheckAttack(bot_state_t *bs)
   if ( bs->enemy )
   {
     /* Characteristic_BFloat's FPU return drives the splash-attack timer. */
-    reactiontime = Characteristic_BFloat(BotCharacter(bs), 11, 0.0, 1.0);
+    reactiontime = Characteristic_BFloat(BotCharacter(bs), CHARACTERISTIC_REACTIONTIME, 0.0, 1.0);
     if ( AAS_Time() - reactiontime >= bs->enemysight_time )
     {
       entinfo = AAS_EntityInfo(bs->enemy);
@@ -1421,27 +1443,27 @@ void BotCheckAttack(bot_state_t *bs)
           if ( (trace.ent == bs->enemy
                 || trace.ent <= 0 || trace.ent > botlibglobals.num_clients
                 || !BotSameTeam(bs, trace.ent))
-            && ((v6 = wi->proj, (v6->damagetype & 2) == 0)
+            && ((v6 = wi->proj, (v6->damagetype & DAMAGETYPE_RADIAL) == 0)
              || dk_impact >= v6->radius + DK_SPLASH_SLACK) )
           {
-            if ( (trace.contents & 2) != 0 )
+            if ( (trace.contents & CONTENTS_WINDOW) != 0 )
             {
               entinfo = AAS_EntityInfo(bs->enemy);
               trace = AAS_Trace(trace.endpos, (float*)(uintptr_t)(0), (float*)(uintptr_t)(0),
-                                entinfo.origin, bs->entitynum, 100663299);
+                                entinfo.origin, bs->entitynum, MASK_SHOT);
               if ( trace.ent != bs->enemy )
                 return;
             }
-            if ( (wi->flags & 1) != 0 )
+            if ( (wi->flags & WFL_FIRERELEASED) != 0 )
             {
-              if ( (*(unsigned char *)&bs->flags & 2) != 0 )
+              if ( (bs->flags & BFL_ATTACKED) != 0 )
                 EA_Attack(bs->client);
             }
             else
             {
               EA_Attack(bs->client);
             }
-            bs->flags ^= 2u;
+            bs->flags ^= BFL_ATTACKED;
           }
         }
       }
@@ -1650,7 +1672,7 @@ void __cdecl sub_10025070(void)
       if ( AAS_FloatForBSPEpairKey(ent, "health") )
       {
         VectorMA(origin, -dist, movedir, goalorigin);
-        AAS_DrawPermanentCross(goalorigin, 4.0f, (int)0xf3f3f1f1);
+        AAS_DrawPermanentCross(goalorigin, 4.0f, LINECOLOR_BLUE);
       }
       else
       {
@@ -1670,16 +1692,16 @@ void __cdecl sub_10025070(void)
         trace = AAS_TraceClientBBox(start, end, PRESENCE_CROUCH, -1);
         if ( !trace.startsolid )
           VectorCopy(trace.endpos, goalorigin);
-        AAS_DrawPermanentCross(goalorigin, 4.0f, (int)0xdcdddedf);
+        AAS_DrawPermanentCross(goalorigin, 4.0f, LINECOLOR_YELLOW);
 
         VectorSubtract(mins, origin, mins);
         VectorSubtract(maxs, origin, maxs);
 
         VectorAdd(mins, origin, start);
-        AAS_DrawPermanentCross(start, 4.0f, (int)0xf3f3f1f1);
+        AAS_DrawPermanentCross(start, 4.0f, LINECOLOR_BLUE);
 
         VectorAdd(maxs, origin, start);
-        AAS_DrawPermanentCross(start, 4.0f, (int)0xf3f3f1f1);
+        AAS_DrawPermanentCross(start, 4.0f, LINECOLOR_BLUE);
       }
 
       if ( ++drawn > 5 )
@@ -2277,7 +2299,7 @@ void __cdecl BotAIBlocked(bot_state_t *bs, bot_moveresult_t *moveresult, int act
   VectorSet(mins, -16, -16, -24);
   VectorSet(maxs, 16, 16, 4);
   CrossProduct(hordir, up, sideward);
-  if ( bs->flags & 0x10 )
+  if ( bs->flags & BFL_AVOIDRIGHT )
   {
     sideward[0] = -sideward[0];
     sideward[1] = -sideward[1];
@@ -2285,7 +2307,7 @@ void __cdecl BotAIBlocked(bot_state_t *bs, bot_moveresult_t *moveresult, int act
   }
   if ( !BotMoveInDirection((bot_movestate_t *)&bs->ms, sideward, 400, MOVE_WALK) )
   {
-    bs->flags ^= 0x10;
+    bs->flags ^= BFL_AVOIDRIGHT;
     sideward[0] = -sideward[0];
     sideward[1] = -sideward[1];
     sideward[2] = -sideward[2];
@@ -2299,7 +2321,7 @@ void __cdecl BotAIBlocked(bot_state_t *bs, bot_moveresult_t *moveresult, int act
 
 // gladiator.dll: 100262C0..1002638D
 // gladi386.so:   000308CC..000309C2
-void __cdecl sub_100262C0(_DWORD *a1, bot_goal_t *a2)
+void __cdecl sub_100262C0(bot_state_t *bs, bot_goal_t *a2)
 {
   aas_entityinfo_t info; // [esp+8h] [ebp-7Ch] BYREF
 
@@ -2309,12 +2331,17 @@ void __cdecl sub_100262C0(_DWORD *a1, bot_goal_t *a2)
     {
       info = AAS_EntityInfo(a2->entitynum);
       if ( (info.modelindex == modelindex_tech1 || info.modelindex == modelindex_tech2 || info.modelindex == modelindex_tech3 || info.modelindex == modelindex_tech4)
-        && ((int)a1[477] > 0 && info.modelindex != modelindex_tech1
-         || (int)a1[478] > 0 && info.modelindex != modelindex_tech2
-         || (int)a1[479] > 0 && info.modelindex != modelindex_tech3
-         || (int)a1[480] > 0 && info.modelindex != modelindex_tech3) )
+        && (bs->inventory[INVENTORY_TECH1] > 0 && info.modelindex != modelindex_tech1
+         || bs->inventory[INVENTORY_TECH2] > 0 && info.modelindex != modelindex_tech2
+         || bs->inventory[INVENTORY_TECH3] > 0 && info.modelindex != modelindex_tech3
+#if GLAD_SERVERFIX /* GLAD_SERVERFIX(ctf-tech4-compares-tech3) */
+         || bs->inventory[INVENTORY_TECH4] > 0 && info.modelindex != modelindex_tech4) )
+#else
+         /* The original's: the fourth test compares the goal with tech 3, not 4. */
+         || bs->inventory[INVENTORY_TECH4] > 0 && info.modelindex != modelindex_tech3) )
+#endif
       {
-        EA_DropItem(a1[1], "tech");
+        EA_DropItem(bs->client, "tech");
       }
     }
   }
@@ -2395,7 +2422,7 @@ void __cdecl BotCTFSeekGoals(bot_state_t *bs)
 // gladi386.so:   00030CC0..00030D42
 BOOL TeamPlayIsOn()
 {
-  return ((int)dmflags->value & 0xC0) != 0
+  return ((int)dmflags->value & (DF_MODELTEAMS | DF_SKINTEAMS)) != 0
       || ctf->value != 0.0f
       || teamplay->value != 0.0f;
 }
@@ -2448,18 +2475,18 @@ float __cdecl BotGetTime(bot_match_t *match)
   bot_match_t timematch; // [esp+9Ch] [ebp-F0h] BYREF
   char timestring[152]; // [esp+4h] [ebp-188h] BYREF
 
-  if ( (match->subtype & 0x10) != 0 )
+  if ( (match->subtype & ST_TIME) != 0 )
   {
-    BotMatchVariable(match, 5, timestring);
-    if ( BotFindMatch(timestring, &timematch, 8) )
+    BotMatchVariable(match, TIME, timestring);
+    if ( BotFindMatch(timestring, &timematch, MTCONTEXT_TIME) )
     {
-      BotMatchVariable(&timematch, 5, timestring);
-      if ( timematch.type == 105 )
+      BotMatchVariable(&timematch, TIME, timestring);
+      if ( timematch.type == MSG_MINUTES )
       {
         v1 = atof(timestring) * 60.0;
         t = v1;
       }
-      else if ( timematch.type == 106 )
+      else if ( timematch.type == MSG_SECONDS )
       {
         v1 = atof(timestring);
         t = v1;
@@ -2505,21 +2532,21 @@ int __cdecl BotGetPatrolWaypoints(bot_state_t *bs, bot_match_t *match)
 
   newpatrolpoints = NULL;
   patrolflags = 0;
-  BotMatchVariable(match, 4, Destination);
+  BotMatchVariable(match, KEYAREA, Destination);
   while ( 1 )
   {
-    if ( !BotFindMatch(Destination, &keyareamatch, 64) )
+    if ( !BotFindMatch(Destination, &keyareamatch, MTCONTEXT_PATROLKEYAREA) )
     {
       EA_SayTeam(bs->client, "what do you say?");
       BotFreeWaypoints(newpatrolpoints);
       BotPatrolpoints(bs) = NULL;
       return 0;
     }
-    BotMatchVariable(&keyareamatch, 4, Destination);
+    BotMatchVariable(&keyareamatch, KEYAREA, Destination);
     if ( !BotGetMessageTeamGoal(bs, Destination, &goal) )
     {
       BotInitialChat(&bs->chatstate, "cannotfind", Destination, (char *)0);
-      BotEnterChat(&bs->chatstate, bs->client, 1);
+      BotEnterChat(&bs->chatstate, bs->client, CHAT_TEAM);
       BotFreeWaypoints(newpatrolpoints);
       BotPatrolpoints(bs) = NULL;
       return 0;
@@ -2539,19 +2566,19 @@ int __cdecl BotGetPatrolWaypoints(bot_state_t *bs, bot_match_t *match)
       wp->next = newwp;
       newwp->prev = wp;
     }
-    if ( (keyareamatch.subtype & 0x200) != 0 )
+    if ( (keyareamatch.subtype & ST_BACK) != 0 )
     {
       patrolflags = 1;
       break;
     }
-    else if ( (keyareamatch.subtype & 0x400) != 0 )
+    else if ( (keyareamatch.subtype & ST_REVERSE) != 0 )
     {
       patrolflags = 2;
       break;
     }
-    else if ( (keyareamatch.subtype & 0x100) != 0 )
+    else if ( (keyareamatch.subtype & ST_MORE) != 0 )
     {
-      BotMatchVariable(&keyareamatch, 5, Destination);
+      BotMatchVariable(&keyareamatch, MORE, Destination);
     }
     else
     {
@@ -2588,35 +2615,35 @@ int __cdecl BotAddressedToBot(bot_state_t *bs, bot_match_t *match)
   /* One bot_match_t (240 B), filled by BotFindMatch — see chat_state.h. */
   bot_match_t addresseematch; // [esp+140h] [ebp-188h] BYREF
 
-  BotMatchVariable(match, 0, netname);
+  BotMatchVariable(match, NETNAME, netname);
   client = ClientFromName(netname);
   if ( client < 0 )
     return 0;
   result = BotSameTeam(bs, client + 1);
   if ( !result )
     return result;
-  if ( (match->subtype & 2) != 0 )
+  if ( (match->subtype & ST_ADDRESSED) != 0 )
   {
-    BotMatchVariable(match, 1, addressedto);
+    BotMatchVariable(match, ADDRESSEE, addressedto);
     botname = ClientName(bs->client);
-    while ( BotFindMatch(addressedto, &addresseematch, 32) )
+    while ( BotFindMatch(addressedto, &addresseematch, MTCONTEXT_ADDRESSEE) )
     {
-      if ( addresseematch.type == 101 )
+      if ( addresseematch.type == MSG_EVERYONE )
       {
         return 1;
       }
-      if ( addresseematch.type == 102 )
+      if ( addresseematch.type == MSG_MULTIPLENAMES )
       {
-        BotMatchVariable(&addresseematch, 3, name);
+        BotMatchVariable(&addresseematch, TEAMMATE, name);
         if ( StringContains(botname, name, 0) )
           return 1;
         if ( StringContains(bs->teamleader, name, 0) )
           return 1;
-        BotMatchVariable(&addresseematch, 5, addressedto);
+        BotMatchVariable(&addresseematch, MORE, addressedto);
       }
       else
       {
-        BotMatchVariable(&addresseematch, 3, name);
+        BotMatchVariable(&addresseematch, TEAMMATE, name);
         if ( StringContains(botname, name, 0) )
           return 1;
         if ( StringContains(bs->teamleader, name, 0) )
@@ -2706,12 +2733,12 @@ int __cdecl BotMatchMessage(bot_state_t *bs, char *message)
   aas_entityinfo_t entinfo;
 
   match.type = 0;
-  if ( !BotFindMatch(message, &match, 7) )
+  if ( !BotFindMatch(message, &match, MTCONTEXT_CLIENTOBITUARY|MTCONTEXT_ENTERGAME|MTCONTEXT_INITIALTEAMCHAT) )
     return 0;
   switch ( match.type )
   {
-    case 1: //MSG_DEATH
-      BotMatchVariable(&match, 0, buf);
+    case MSG_DEATH:
+      BotMatchVariable(&match, VICTIM, buf);
       v3 = ClientFromName(buf);
       if ( v3 == bs->client )
       {
@@ -2726,17 +2753,17 @@ int __cdecl BotMatchMessage(bot_state_t *bs, char *message)
         bs->killedenemy_time = AAS_Time();
         break;
       }
-    case 2: //MSG_ENTERGAME
-    case 17: //MSG_DOFORMATION
+    case MSG_ENTERGAME:
+    case MSG_DOFORMATION:
       break;
-    case 3: //MSG_HELP
-    case 4: //MSG_ACCOMPANY
+    case MSG_HELP:
+    case MSG_ACCOMPANY:
       if ( !TeamPlayIsOn() || !BotAddressedToBot(bs, &match) )
         break;
-      BotMatchVariable(&match, 3, teammate);
-      if ( BotFindMatch(teammate, &teammatematch, 16) && teammatematch.type == 100 )
+      BotMatchVariable(&match, TEAMMATE, teammate);
+      if ( BotFindMatch(teammate, &teammatematch, MTCONTEXT_TEAMMATE) && teammatematch.type == MSG_ME )
       {
-        BotMatchVariable(&match, 0, netname);
+        BotMatchVariable(&match, NETNAME, netname);
         client = ClientFromName(netname) + 1;
         other = 0;
       }
@@ -2753,7 +2780,7 @@ int __cdecl BotMatchMessage(bot_state_t *bs, char *message)
           BotInitialChat(&bs->chatstate, "whois", teammate, (char *)0);
         else
           BotInitialChat(&bs->chatstate, "whois", netname, (char *)0);
-        BotEnterChat(&bs->chatstate, bs->client, 1);
+        BotEnterChat(&bs->chatstate, bs->client, CHAT_TEAM);
         break;
       }
       bs->teamgoal.entitynum = 0;
@@ -2775,13 +2802,13 @@ int __cdecl BotMatchMessage(bot_state_t *bs, char *message)
       }
       if ( !bs->teamgoal.entitynum )
       {
-        if ( match.subtype & 1 )
+        if ( match.subtype & ST_NEARITEM )
         {
-          BotMatchVariable(&match, 2, itemname);
+          BotMatchVariable(&match, ITEM, itemname);
           if ( !BotGetMessageTeamGoal(bs, itemname, &bs->teamgoal) )
           {
             BotInitialChat(&bs->chatstate, "cannotfind", itemname, (char *)0);
-            BotEnterChat(&bs->chatstate, bs->client, 1);
+            BotEnterChat(&bs->chatstate, bs->client, CHAT_TEAM);
             break;
           }
         }
@@ -2793,14 +2820,14 @@ int __cdecl BotMatchMessage(bot_state_t *bs, char *message)
         else
           BotInitialChat(&bs->chatstate, "whereareyou", netname,
                          (char *)0);
-        BotEnterChat(&bs->chatstate, bs->client, 1);
+        BotEnterChat(&bs->chatstate, bs->client, CHAT_TEAM);
         break;
       }
       bs->teammate = client;
       bs->teammatevisible_time = AAS_Time();
       bs->teammessage_time = AAS_Time() + 2 * random();
       bs->teamgoal_time = BotGetTime(&match);
-      if ( match.type == 3 )
+      if ( match.type == MSG_HELP )
       {
         bs->ltgtype = 1;
         if ( !bs->teamgoal_time )
@@ -2815,14 +2842,14 @@ int __cdecl BotMatchMessage(bot_state_t *bs, char *message)
         bs->arrive_time = 0;
       }
       break;
-    case 5: //MSG_DEFENDKEYAREA
+    case MSG_DEFENDKEYAREA:
       if ( !TeamPlayIsOn() || !BotAddressedToBot(bs, &match) )
         break;
-      BotMatchVariable(&match, 4, itemname);
+      BotMatchVariable(&match, KEYAREA, itemname);
       if ( !BotGetMessageTeamGoal(bs, itemname, &bs->teamgoal) )
       {
         BotInitialChat(&bs->chatstate, "cannotfind", itemname, (char *)0);
-        BotEnterChat(&bs->chatstate, bs->client, 1);
+        BotEnterChat(&bs->chatstate, bs->client, CHAT_TEAM);
         break;
       }
       bs->teammessage_time = AAS_Time() + 2 * random();
@@ -2832,19 +2859,19 @@ int __cdecl BotMatchMessage(bot_state_t *bs, char *message)
         bs->teamgoal_time = AAS_Time() + 120;
       bs->defendaway_time = 0;
       break;
-    case 19: //MSG_CAMP
+    case MSG_CAMP:
       if ( !TeamPlayIsOn() || !BotAddressedToBot(bs, &match) )
         break;
-      BotMatchVariable(&match, 0, netname);
+      BotMatchVariable(&match, NETNAME, netname);
       client = FindClientByName(netname) + 1;
       if ( !client )
       {
         BotInitialChat(&bs->chatstate, "whois", netname, (char *)0);
-        BotEnterChat(&bs->chatstate, bs->client, 1);
+        BotEnterChat(&bs->chatstate, bs->client, CHAT_TEAM);
         break;
       }
-      BotMatchVariable(&match, 4, itemname);
-      if ( match.subtype & 0x40 )
+      BotMatchVariable(&match, KEYAREA, itemname);
+      if ( match.subtype & ST_THERE )
       {
         bs->teamgoal.entitynum = bs->entitynum;
         bs->teamgoal.areanum = bs->ms.areanum;
@@ -2852,7 +2879,7 @@ int __cdecl BotMatchMessage(bot_state_t *bs, char *message)
         VectorSet(bs->teamgoal.mins, -8, -8, -8);
         VectorSet(bs->teamgoal.maxs, 8, 8, 8);
       }
-      else if ( match.subtype & 0x20 )
+      else if ( match.subtype & ST_HERE )
       {
         if ( client == bs->entitynum )
           break;
@@ -2877,14 +2904,14 @@ int __cdecl BotMatchMessage(bot_state_t *bs, char *message)
         {
           BotInitialChat(&bs->chatstate, "whereareyou", netname,
                          (char *)0);
-          BotEnterChat(&bs->chatstate, bs->client, 1);
+          BotEnterChat(&bs->chatstate, bs->client, CHAT_TEAM);
           break;
         }
       }
       else if ( !BotGetMessageTeamGoal(bs, itemname, &bs->teamgoal) )
       {
         BotInitialChat(&bs->chatstate, "cannotfind", itemname, (char *)0);
-        BotEnterChat(&bs->chatstate, bs->client, 1);
+        BotEnterChat(&bs->chatstate, bs->client, CHAT_TEAM);
         break;
       }
       bs->teammessage_time = AAS_Time() + 2 * random();
@@ -2895,7 +2922,7 @@ int __cdecl BotMatchMessage(bot_state_t *bs, char *message)
       bs->teammate = client;
       bs->arrive_time = 0;
       break;
-    case 21: //MSG_PATROL
+    case MSG_PATROL:
       if ( !TeamPlayIsOn() )
         break;
       if ( !BotAddressedToBot(bs, &match) )
@@ -2908,14 +2935,14 @@ int __cdecl BotMatchMessage(bot_state_t *bs, char *message)
       if ( !bs->teamgoal_time )
         bs->teamgoal_time = AAS_Time() + 300;
       break;
-    case 7: //MSG_GETFLAG
+    case MSG_GETFLAG:
       if ( ctf->value == 0.0f || !ctf_flag1.areanum || !ctf_flag2.areanum || !BotAddressedToBot(bs, &match) )
         break;
       bs->teammessage_time = AAS_Time() + 2 * random();
       bs->ltgtype = 4;
       bs->teamgoal_time = AAS_Time() + 180;
       break;
-    case 6: //MSG_RUSHBASE
+    case MSG_RUSHBASE:
       if ( ctf->value == 0.0f || !ctf_flag1.areanum || !ctf_flag2.areanum || !BotAddressedToBot(bs, &match) )
         break;
       bs->teammessage_time = AAS_Time() + 2 * random();
@@ -2923,28 +2950,28 @@ int __cdecl BotMatchMessage(bot_state_t *bs, char *message)
       bs->teamgoal_time = AAS_Time() + 120;
       bs->rushbaseaway_time = 0;
       break;
-    case 12: //MSG_JOINSUBTEAM
+    case MSG_JOINSUBTEAM:
       if ( !TeamPlayIsOn() || !BotAddressedToBot(bs, &match) )
         break;
-      BotMatchVariable(&match, 3, teammate);
+      BotMatchVariable(&match, TEAMNAME, teammate);
       strncpy(bs->teamleader, teammate, 32);
       bs->teamleader[31] = '\0';
       BotInitialChat(&bs->chatstate, "joinedteam", teammate, (char *)0);
-      BotEnterChat(&bs->chatstate, bs->client, 1);
+      BotEnterChat(&bs->chatstate, bs->client, CHAT_TEAM);
       break;
-    case 13: //MSG_LEAVESUBTEAM
+    case MSG_LEAVESUBTEAM:
       if ( !TeamPlayIsOn() || !BotAddressedToBot(bs, &match) )
         break;
       if ( strlen(bs->teamleader) )
         BotInitialChat(&bs->chatstate, "leftteam", bs->teamleader,
                        (char *)0);
-      BotEnterChat(&bs->chatstate, bs->client, 1);
+      BotEnterChat(&bs->chatstate, bs->client, CHAT_TEAM);
       strcpy(bs->teamleader, "");
       break;
-    case 20: //MSG_CHECKPOINT
+    case MSG_CHECKPOINT:
       if ( !TeamPlayIsOn() )
         break;
-      BotMatchVariable(&match, 4, buf);
+      BotMatchVariable(&match, POSITION, buf);
       VectorClear(position);
       sscanf(buf, "%f %f %f", &position[0], &position[1], &position[2]);
       position[2] += 0.5;
@@ -2954,10 +2981,10 @@ int __cdecl BotMatchMessage(bot_state_t *bs, char *message)
         if ( !BotAddressedToBot(bs, &match) )
           break;
         BotInitialChat(&bs->chatstate, "checkpoint_invalid", (char *)0);
-        BotEnterChat(&bs->chatstate, bs->client, 1);
+        BotEnterChat(&bs->chatstate, bs->client, CHAT_TEAM);
         break;
       }
-      BotMatchVariable(&match, 5, buf);
+      BotMatchVariable(&match, NAME, buf);
       cp = BotFindWayPoint(BotCheckpoints(bs), buf);
       if ( cp )
       {
@@ -2979,22 +3006,22 @@ int __cdecl BotMatchMessage(bot_state_t *bs, char *message)
         sprintf(buf, "%1.0f %1.0f %1.0f", cp->goal.origin[0], cp->goal.origin[1], cp->goal.origin[2]);
         BotInitialChat(&bs->chatstate, "checkpoint_confirm", cp->name, buf,
                        (char *)0);
-        BotEnterChat(&bs->chatstate, bs->client, 1);
+        BotEnterChat(&bs->chatstate, bs->client, CHAT_TEAM);
       }
       break;
-    case 14: //MSG_CREATENEWFORMATION
+    case MSG_CREATENEWFORMATION:
       EA_SayTeam(bs->client,
                  "the part of my brain to create formations has been damaged");
       break;
-    case 15: //MSG_FORMATIONPOSITION
+    case MSG_FORMATIONPOSITION:
       EA_SayTeam(bs->client,
                  "the part of my brain to create formations has been damaged");
       break;
-    case 16: //MSG_FORMATIONSPACE
+    case MSG_FORMATIONSPACE:
       if ( !TeamPlayIsOn() || !BotAddressedToBot(bs, &match) )
         break;
-      BotMatchVariable(&match, 4, buf);
-      if ( match.subtype & 8 )
+      BotMatchVariable(&match, NUMBER, buf);
+      if ( match.subtype & ST_FEET )
         space = 0.3048 * 32 * atof(buf);
       else
         space = 32 * atof(buf);
@@ -3002,7 +3029,7 @@ int __cdecl BotMatchMessage(bot_state_t *bs, char *message)
         space = 100;
       bs->formation_dist = space;
       break;
-    case 18: //MSG_DISMISS
+    case MSG_DISMISS:
       if ( !TeamPlayIsOn() )
         break;
       if ( !BotAddressedToBot(bs, &match) )
@@ -3010,11 +3037,11 @@ int __cdecl BotMatchMessage(bot_state_t *bs, char *message)
       if ( bs->ltgtype == 2 || bs->ltgtype == 1 )
         bs->ltgtype = 0;
       break;
-    case 8: //MSG_STARTTEAMLEADERSHIP
+    case MSG_STARTTEAMLEADERSHIP:
       if ( !TeamPlayIsOn() )
         break;
-      BotMatchVariable(&match, 3, teammate);
-      if ( match.subtype & 0x80 )
+      BotMatchVariable(&match, TEAMMATE, teammate);
+      if ( match.subtype & ST_I )
       {
         strncpy(bs->formation_teammate, teammate, 16);
         bs->formation_teammate[15] = '\0';
@@ -3025,13 +3052,13 @@ int __cdecl BotMatchMessage(bot_state_t *bs, char *message)
         break;
       strcpy(bs->formation_teammate, ClientName(v49));
       break;
-    case 9: //MSG_STOPTEAMLEADERSHIP
+    case MSG_STOPTEAMLEADERSHIP:
       if ( !TeamPlayIsOn() )
         break;
-      BotMatchVariable(&match, 3, teammate);
-      if ( match.subtype & 0x80 )
+      BotMatchVariable(&match, TEAMMATE, teammate);
+      if ( match.subtype & ST_I )
       {
-        BotMatchVariable(&match, 0, netname);
+        BotMatchVariable(&match, NETNAME, netname);
         v50 = FindClientByName(netname);
       }
       else
@@ -3044,18 +3071,18 @@ int __cdecl BotMatchMessage(bot_state_t *bs, char *message)
         break;
       bs->formation_teammate[0] = '\0';
       break;
-    case 11: //MSG_WHATAREYOUDOING
+    case MSG_WHATAREYOUDOING:
       if ( !BotAddressedToBot(bs, &match) )
         break;
       switch ( bs->ltgtype )
       {
         case 1:
-          BotMatchVariable(&match, 0, netname);
+          BotMatchVariable(&match, NETNAME, netname);
           EasyClientName(bs->teammate - 1, netname);
           BotInitialChat(&bs->chatstate, "helping", netname, (char *)0);
           break;
         case 2:
-          BotMatchVariable(&match, 0, netname);
+          BotMatchVariable(&match, NETNAME, netname);
           EasyClientName(bs->teammate - 1, netname);
           BotInitialChat(&bs->chatstate, "accompanying", netname,
                          (char *)0);
@@ -3078,7 +3105,7 @@ int __cdecl BotMatchMessage(bot_state_t *bs, char *message)
         default:
           return 0;
       }
-      BotEnterChat(&bs->chatstate, bs->client, 1);
+      BotEnterChat(&bs->chatstate, bs->client, CHAT_TEAM);
       break;
     default:
       botimport.Print(PRT_MESSAGE, "unknown match type\n");
@@ -3101,10 +3128,10 @@ void __cdecl BotCheckConsoleMessages(bot_state_t *bs)
   {
     if ( BotNumConsoleMessages(&bs->chatstate) < 10 )
     {
-      if ( m->type == 1 && m->time > AAS_Time() - (1 + random()) )
+      if ( m->type == CMS_CHAT && m->time > AAS_Time() - (1 + random()) )
         return;
     }
-    if ( m->type == 1 )
+    if ( m->type == CMS_CHAT )
     {
       ptr = strstr(m->message, ":");
       if ( ptr )
@@ -3122,17 +3149,18 @@ void __cdecl BotCheckConsoleMessages(bot_state_t *bs)
       }
     }
     UnifyWhiteSpaces(m->message);
-    context = 3;
+    context = CONTEXT_NORMAL|CONTEXT_NEARBYITEM;
     if ( ctf->value )
-      context = BotCTFTeam(bs) == 1 ? 7 : 11;
+      context = BotCTFTeam(bs) == 1 ? (CONTEXT_NORMAL|CONTEXT_NEARBYITEM|CONTEXT_CTFREDTEAM)
+                                    : (CONTEXT_NORMAL|CONTEXT_NEARBYITEM|CONTEXT_CTFBLUETEAM);
     BotReplaceSynonyms(m->message, context);
     if ( !BotMatchMessage(bs, m->message) )
     {
-      if ( m->type == 1 && !nochat->value )
+      if ( m->type == CMS_CHAT && !nochat->value )
       {
         if ( BotAINode(bs) != AINode_Stand && BotValidChatPosition(bs) )
         {
-          chat_reply = Characteristic_BFloat(BotCharacter(bs), 22, 0, 1);
+          chat_reply = Characteristic_BFloat(BotCharacter(bs), CHARACTERISTIC_CHAT_REPLY, 0, 1);
           if ( random() < 1.5 / (NumBots() + 1) && random() < chat_reply )
           {
             ptr = strstr(m->message, ":");
@@ -3380,11 +3408,11 @@ int BotDeathmatchAI(bot_state_t *bs, float thinktime)
   {
     char *characteristic_string;
 
-    characteristic_string = Characteristic_String(BotCharacter(bs), 3);
+    characteristic_string = Characteristic_String(BotCharacter(bs), CHARACTERISTIC_GENDER);
     EA_Command(bs->client, "gender", characteristic_string, (char *)0);
     if ( LibVarValue("altnames", (char *)"0") != 0.0f )
     {
-      characteristic_string = Characteristic_String(BotCharacter(bs), 1);
+      characteristic_string = Characteristic_String(BotCharacter(bs), CHARACTERISTIC_ALT_NAME);
       EA_Command(bs->client, "name", characteristic_string, (char *)0);
     }
     bs->inuse_marker = 0;

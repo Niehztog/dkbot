@@ -12,6 +12,7 @@
 struct dk_originals {
 	int  (*dll_Entry)(HINSTANCE, DWORD, PVOID);
 	int  (*dll_ClientConnect)(userEntity_t *, void *, int);
+	void (*dll_ClientDisconnect)(userEntity_t *);
 	void (*dll_ClientBeginServerFrame)(userEntity_t *);
 	void (*Client_Think)(edict_t *, usercmd_t *);
 	void (*P_RunFrame)(void);
@@ -94,6 +95,7 @@ const char *dkbot_bot_name(int i);
 int   dkbot_is_bot(const edict_t *ent);
 int   dkbot_adding_bot(void);
 int   dkbot_release_edict(const edict_t *ent);
+void  dkbot_forget_edict(const edict_t *ent);
 edict_t *dkbot_client_edict(int client);
 int   dkbot_slot_is_firing(int entnum);
 void  dkbot_note_weapon_request(const edict_t *ent, const char *classname);

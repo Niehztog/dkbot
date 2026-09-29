@@ -62,6 +62,7 @@ FACTS = {
     "DK_HOOK_OFF_VITA_BOOST":     ("off", "playerHook_s", "vita_boost"),
     "DK_HOOK_OFF_FX_FRAME_FUNC":  ("off", "playerHook_s", "fxFrameFunc"),
     "DK_CLIENT_OFF_PS":           ("off", "gclient_s", "ps"),
+    "DK_CLIENT_OFF_VERIFIED_BOT": ("off", "gclient_s", "bVerifiedBot"),
     "DK_PS_OFF_PMOVE":            ("off", "player_state_t", "pmove"),
     "DK_PS_OFF_VIEWANGLES":       ("off", "player_state_t", "viewangles"),
     "DK_PS_OFF_VIEWOFFSET":       ("off", "player_state_t", "viewoffset"),
@@ -153,7 +154,8 @@ MIRRORS = [
 ]
 
 # Names dk_plat_resolve takes from the exe's export table.
-EXPORTS = ["dll_Entry", "dll_ClientConnect", "dll_ClientBeginServerFrame"]
+EXPORTS = ["dll_Entry", "dll_ClientConnect", "dll_ClientDisconnect",
+           "dll_ClientBeginServerFrame"]
 
 PRIM_SIZE = {
     "char": 1, "unsigned char": 1, "signed char": 1, "bool": 1, "__int8": 1,
